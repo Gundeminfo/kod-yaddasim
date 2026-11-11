@@ -273,6 +273,58 @@ textarea.inp{height:110px;padding:10px 14px;resize:vertical;font-size:13px}
 .mem-row .sq-btn{width:40px;height:40px;color:var(--danger)}
 .acct small{color:var(--muted);font-size:12px}
 .det-by{margin:12px 0 0;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+
+/* ---------- shop prices ---------- */
+:root{--sale:#D3202B}
+[data-theme="gece"]{--sale:#FF6B6B}
+.tag.sale{background:var(--sale);color:#fff}
+.tag.sale s{font-weight:600;font-size:.78em;opacity:.8;margin-left:2px}
+.ph{position:relative}
+.off{position:absolute;top:6px;left:6px;padding:2px 7px;border-radius:999px;background:var(--sale);color:#fff;font-size:12px;font-weight:750;line-height:1.3;font-variant-numeric:tabular-nums}
+.det-code .num.sku{font-size:clamp(26px,8vw,38px)}
+
+.det-prices{margin:16px 0 0}
+.pt-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.pt-head h3{margin:0;font-size:16px;font-weight:800}
+.link-btn{border:0;background:transparent;color:var(--accent);font-weight:700;font-size:15px;padding:6px 2px;min-height:40px}
+.pt{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;font-variant-numeric:tabular-nums}
+.pt th,.pt td{padding:10px 12px;border-top:1px solid var(--line);font-size:15px;vertical-align:top;text-align:right;white-space:nowrap}
+.pt thead th{border-top:0;padding-top:8px;padding-bottom:8px;font-size:12px;font-weight:600;color:var(--muted)}
+.pt th:first-child{text-align:left;white-space:normal;width:40%}
+.pt th,.pt td{overflow-wrap:anywhere}
+.pt tbody th{font-weight:700}
+.pt tbody th small{display:block;margin-top:2px;font-size:12px;font-weight:500;color:var(--muted)}
+.pt .cheap{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#2F6B3F;color:#fff;font-size:11px;font-weight:700;vertical-align:1px}
+.pt tr.cheapest th,.pt tr.cheapest td{background:color-mix(in srgb,#2F6B3F 9%,var(--surface))}
+.pt td b{color:var(--sale);font-weight:750}
+.pct-off{display:block;margin-top:2px;font-size:12px;font-weight:700;color:var(--sale)}
+.pt .none{color:var(--muted)}
+.pt-unit{margin:6px 2px 0;font-size:12px;color:var(--muted)}
+
+/* price inputs in the form */
+.lbl-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px}
+.flabel{font-size:14px;font-weight:600}
+.lbl-row .seg button{height:38px}
+.pgrid{display:grid;grid-template-columns:minmax(64px,auto) 1fr 1fr 42px;gap:6px;align-items:center}
+.pg-h{padding-left:4px;font-size:12px;font-weight:600;color:var(--muted)}
+.field .pg-store{display:block;margin:0;font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.pgrid .inp{height:44px;padding:0 10px;font-variant-numeric:tabular-nums;min-width:0}
+.pg-pct{font-size:13px;font-weight:700;color:var(--sale);text-align:right;font-variant-numeric:tabular-nums}
+
+/* sub-category filter rows */
+#filters{margin:-8px 0 14px}
+#filters:empty{display:none}
+.frow{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0;margin:0 calc(-1 * var(--pad));padding-left:var(--pad);padding-right:var(--pad);scroll-padding:0 var(--pad)}
+.frow::-webkit-scrollbar{display:none}
+.frow + .frow{margin-top:6px}
+.fchip{flex:none;height:38px;padding:0 13px;border-radius:19px;border:1.5px solid var(--line);background:var(--surface);font-size:14px;font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.fchip b{font-weight:600;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.fchip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.fchip[aria-pressed="true"] b{color:inherit;opacity:.75}
+.frow.sub .fchip{height:34px;font-size:13px;border-radius:17px}
+.fchip.sale{border-color:color-mix(in srgb,var(--sale) 45%,var(--line));color:var(--sale)}
+.fchip.sale[aria-pressed="true"]{background:var(--sale);border-color:var(--sale);color:#fff}
+.more{margin-top:14px}
 </style>
 </head>
 <body>
@@ -295,13 +347,22 @@ const FIREBASE_CONFIG = {
 };
 const FB_VER = '12.15.0';
 const MP_VERSIONS = ['1.2.2', '0.10.14'];
-const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_small/float32/1/mobilenet_v3_small.tflite';
+/* the large MobileNet separates look-alike packs better than the small one */
+const MODEL_ID = 'v3l';
+const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_large/float32/1/mobilenet_v3_large.tflite';
+/* shops whose prices we compare; the first is ours and drives the price on cards */
+const STORES = [
+  {id: 'araz', name: 'Araz'}, {id: 'bazar', name: 'Bazarstore'}, {id: 'oba', name: 'OBA'}, {id: 'tam', name: 'Tamstore'},
+];
+const HOME_STORE = 'araz';
+const PAGE = 60;   // cards drawn per step in long lists
 const DEMO = new URLSearchParams(location.search).has('demo');
 const DEMO_ROLE = new URLSearchParams(location.search).get('role') || 'owner';
 const OWNER_EMAIL = 'maksizyevv@gmail.com';
 const ROLE_LABEL = {owner: 'Sahib', editor: 'Əlavə edə bilər', viewer: 'Yalnız baxır'};
-/* similarity thresholds: AI vectors (cosine) and colour fallback */
-const T = {vecShow: 0.45, vecSure: 0.78, colShow: 0.40, colSure: 0.75};
+/* similarity thresholds. AI: cosine of the best match, plus how far it is ahead of the
+   runner-up (a clear winner at a modest score is still a sure match). Colour: fallback only. */
+const T = {vecShow: 0.15, vecSure: 0.45, vecClose: 0.25, vecMargin: 0.15, colShow: 0.40, colSure: 0.75};
 
 /* ================= helpers ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -328,11 +389,37 @@ function fmtCode(c){
 }
 const fmtPrice = p => (p == null || p === '' || isNaN(p)) ? null : Number(p).toFixed(2);
 const UNIT_LABEL = {kq: 'kq', ed: 'ədəd'};
-function priceTag(p){
-  const v = fmtPrice(p.price);
-  if (v == null) return `<span class="tag empty">Qiymət yoxdur</span>`;
-  return `<span class="tag">${v} ₼ <small>/ ${UNIT_LABEL[p.unit] || 'kq'}</small></span>`;
+const money = v => (v == null || v === '' || isNaN(v)) ? null : Math.round(Number(v) * 100) / 100;
+const storeName = id => (STORES.find(s => s.id === id) || {name: id}).name;
+/* every shop's price as {r: regular, s: sale or null}; older products kept one number in p.price */
+function pricesOf(p){
+  const out = {};
+  if (p.prices && typeof p.prices === 'object') {
+    for (const [k, v] of Object.entries(p.prices)) {
+      if (!v || typeof v !== 'object') continue;
+      let r = money(v.r), s = money(v.s);
+      if (r == null && s != null) { r = s; s = null; }
+      if (r == null) continue;
+      out[k] = {...v, r, s: s != null && s < r ? s : null};
+    }
+  }
+  if (!out[HOME_STORE] && money(p.price) != null) out[HOME_STORE] = {r: money(p.price), s: null};
+  return out;
 }
+const nowPrice = x => x.s != null ? x.s : x.r;
+const offPct = x => x.s != null && x.r ? Math.round((1 - x.s / x.r) * 100) : 0;
+function mainPrice(p){ const ps = pricesOf(p); return ps[HOME_STORE] || ps[Object.keys(ps).sort()[0]] || null; }
+const onSale = p => Object.values(pricesOf(p)).some(x => x.s != null);
+function priceTag(p){
+  const m = mainPrice(p), u = UNIT_LABEL[p.unit] || 'kq';
+  if (!m) return `<span class="tag empty">Qiymət yoxdur</span>`;
+  if (m.s != null) return `<span class="tag sale">${fmtPrice(m.s)} ₼ <small>/ ${u}</small><s>${fmtPrice(m.r)}</s></span>`;
+  return `<span class="tag">${fmtPrice(m.r)} ₼ <small>/ ${u}</small></span>`;
+}
+const MONTHS = ['yan', 'fev', 'mar', 'apr', 'may', 'iyn', 'iyl', 'avq', 'sen', 'okt', 'noy', 'dek'];
+const fmtDay = t => { const d = new Date(t); return isNaN(d) ? '' : d.getDate() + ' ' + MONTHS[d.getMonth()]; };
+/* "ŞİRNİYYAT ÇƏKİ" -> "Şirniyyat çəki" */
+const sentence = s => { const l = String(s || '').trim().toLocaleLowerCase('az'); return l ? l[0].toLocaleUpperCase('az') + l.slice(1) : ''; };
 
 const ICON = {
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
@@ -354,7 +441,8 @@ const TINTS = {choc:'#E9D8C8', amber:'#FBE3B6', meat:'#F5CDC8', leaf:'#D4E8C8', 
   cheese:'#FFEDA8', olive:'#E0E5BA', candy:'#F2D2EA', sky:'#CFE2F2', stone:'#E4DFDB', mint:'#CDEBE2'};
 const TINT_CYCLE = ['sky','mint','stone','amber','leaf','rose','candy','wheat'];
 const DEFAULT_CATS = [
-  {id:'sokoladlar',  name:'Şokoladlar',            emoji:'🍫', tint:'choc',   order:1},
+  {id:'sirniyyat',   name:'Şirniyyat',             emoji:'🍬', tint:'candy',  order:0},
+  {id:'sokoladlar', name:'Şokoladlar',            emoji:'🍫', tint:'choc',   order:1},
   {id:'toyuq',       name:'Toyuq məhsulları',      emoji:'🍗', tint:'amber',  order:2},
   {id:'cekili-et',   name:'Çəkili ət məhsulları',  emoji:'🥩', tint:'meat',   order:3},
   {id:'meyve-terevez', name:'Meyvə-tərəvəz',       emoji:'🍎', tint:'leaf',   order:4},
@@ -469,6 +557,7 @@ const S = {
   got: {categories: false, products: false, settings: false}, synced: {categories: false, settings: false},
   hasSettingsDoc: false,
   route: {name: 'home'}, cameFromHome: false, homeScroll: 0, q: '',
+  sel: [], saleOnly: false, limit: PAGE,   // category filters: chosen sub-category path, sale only, cards shown
   ai: 'loading',   // loading | ready | error
   role: null,      // owner | editor | viewer
   members: [],
@@ -563,7 +652,21 @@ function squareCanvas(src, size, frac = 1){
   cx.drawImage(src, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
   return cv;
 }
-const photoFrom = (src, frac = 1) => { const [w, h] = dims(src); return squareCanvas(src, Math.min(560, Math.round(Math.min(w, h) * frac)), frac).toDataURL('image/jpeg', 0.72); };
+/* whole image on a white square, for shop pack shots that are wider than tall */
+function fitCanvas(src, size){
+  const [w, h] = dims(src), k = size / Math.max(w, h);
+  const cv = document.createElement('canvas'); cv.width = cv.height = size;
+  const cx = cv.getContext('2d', {willReadFrequently: true}); cx.imageSmoothingQuality = 'high';
+  cx.fillStyle = '#fff'; cx.fillRect(0, 0, size, size);
+  cx.drawImage(src, (size - w * k) / 2, (size - h * k) / 2, w * k, h * k);
+  return cv;
+}
+/* small photo for the database: WebP where the browser can write it, else JPEG */
+function thumbOf(cv, q = 0.74){
+  const w = cv.toDataURL('image/webp', q);
+  return w.startsWith('data:image/webp') ? w : cv.toDataURL('image/jpeg', q);
+}
+const photoFrom = (src, frac = 1) =>{ const [w, h] = dims(src); return squareCanvas(src, Math.min(560, Math.round(Math.min(w, h) * frac)), frac).toDataURL('image/jpeg', 0.72); };
 async function fileToPhoto(file){ return photoFrom(await imageFrom(file)); }
 
 /* ================= recognition ================= */
@@ -612,10 +715,29 @@ function vecFromCanvas(cv){
     const r = embedder.embed(cv);
     const f = r && r.embeddings && r.embeddings[0] && r.embeddings[0].floatEmbedding;
     if (!f || !f.length) return null;
-    const v = Float32Array.from(f);
-    let n = 0; for (let i = 0; i < v.length; i++) n += v[i] * v[i]; n = Math.sqrt(n) || 1;
-    for (let i = 0; i < v.length; i++) v[i] /= n;
+    const v = unit(Float32Array.from(f));
+    vecDim = v.length;
     return v;
+  } catch (e) { return null; }
+}
+let vecDim = 0;
+function unit(v){ let n = 0; for (let i = 0; i < v.length; i++) n += v[i] * v[i]; n = Math.sqrt(n) || 1; for (let i = 0; i < v.length; i++) v[i] /= n; return v; }
+/* vectors are stored as 8-bit numbers ("q8:" + base64): a quarter of the size, same matches */
+function encVec(v){
+  let m = 0; for (let i = 0; i < v.length; i++) m = Math.max(m, Math.abs(v[i]));
+  const k = m ? 127 / m : 0, q = new Int8Array(v.length);
+  for (let i = 0; i < v.length; i++) q[i] = Math.round(v[i] * k);
+  let s = ''; const u = new Uint8Array(q.buffer);
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return 'q8:' + btoa(s);
+}
+function decVec(b){
+  if (typeof b !== 'string') return null;
+  if (!b.startsWith('q8:')) return b64ToF32(b);
+  try {
+    const s = atob(b.slice(3)), v = new Float32Array(s.length);
+    for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); v[i] = c > 127 ? c - 256 : c; }
+    return unit(v);
   } catch (e) { return null; }
 }
 async function vecFromSrc(src){ if (!embedder) return null; try { return vecFromCanvas(squareCanvas(await loadImage(src), AI_SIZE)); } catch (e) { return null; } }
@@ -630,11 +752,13 @@ function b64ToF32(b){
 }
 const dot = (a, b) => { if (!a || !b || a.length !== b.length) return -1; let t = 0; for (let i = 0; i < a.length; i++) t += a[i] * b[i]; return t; };
 const vecCache = new Map(), sigCache = new Map();
+/* only vectors made by the current model can be compared */
 function vecsOf(p){
-  const key = p.id + ':' + (p.updatedAt || 0) + ':' + (p.emb ? p.emb.length : 0) + ':' + (p.refs ? p.refs.length : 0);
+  const key = p.id + ':' + (p.updatedAt || 0) + ':' + (p.emb ? p.emb.length : 0) + ':' + (p.refs ? p.refs.length : 0) + ':' + vecDim + ':' + (p.embModel || '');
   let c = vecCache.get(p.id);
   if (c && c.key === key) return c.v;
-  const v = [p.emb, ...(Array.isArray(p.refs) ? p.refs : [])].filter(Boolean).map(b64ToF32).filter(Boolean);
+  const raw = [p.embModel === MODEL_ID ? p.emb : null, ...(Array.isArray(p.refs) ? p.refs : [])];
+  const v = raw.filter(Boolean).map(decVec).filter(x => x && x.length && (!vecDim || x.length === vecDim));
   vecCache.set(p.id, {key, v}); return v;
 }
 async function sigOf(p){
@@ -646,28 +770,35 @@ async function sigOf(p){
 /* q = {vec?, sig?} -> [{p, score}] best first; mode tells which signal was used */
 async function rankQuery(q){
   const out = [];
-  if (q.vec && S.products.some(p => vecsOf(p).length)) {
+  const qv = (q.vecs || [q.vec]).filter(Boolean);
+  if (qv.length && S.products.some(p => vecsOf(p).length)) {
     for (const p of S.products) {
       const vs = vecsOf(p); if (!vs.length) continue;
-      let best = -1; for (const v of vs) best = Math.max(best, dot(q.vec, v));
+      let best = -1; for (const v of vs) for (const a of qv) best = Math.max(best, dot(a, v));
       out.push({p, score: best});
     }
-    return {mode: 'ai', list: out.sort((a, b) => b.score - a.score)};
+    out.sort((a, b) => b.score - a.score);
+    return {mode: 'ai', list: out, gap: out.length > 1 ? out[0].score - out[1].score : 1};
   }
   if (q.sig) {
     for (const p of S.products) { if (!p.photo) continue; const sg = await sigOf(p); if (sg) out.push({p, score: sigSim(q.sig, sg)}); }
   }
-  return {mode: 'color', list: out.sort((a, b) => b.score - a.score)};
+  out.sort((a, b) => b.score - a.score);
+  return {mode: 'color', list: out, gap: out.length > 1 ? out[0].score - out[1].score : 1};
 }
-function verdict(mode, score){
-  const show = mode === 'ai' ? T.vecShow : T.colShow, sure = mode === 'ai' ? T.vecSure : T.colSure;
-  return score >= sure ? 'sure' : score >= show ? 'maybe' : 'none';
+/* gap = lead of the best match over the second; it only counts for the best one */
+function verdict(mode, score, gap = 0){
+  if (mode === 'ai') {
+    if (score >= T.vecSure || (score >= T.vecClose && gap >= T.vecMargin)) return 'sure';
+    return score >= T.vecShow ? 'maybe' : 'none';
+  }
+  return score >= T.colSure ? 'sure' : score >= T.colShow ? 'maybe' : 'none';
 }
 /* remember a confirmed scan as an extra example of that product */
 function learn(p, vec){
   if (!vec || !p || !can.edit()) return;
   const vs = vecsOf(p); if (vs.some(v => dot(v, vec) > 0.96)) return;
-  const refs = (Array.isArray(p.refs) ? p.refs.slice() : []); refs.push(f32ToB64(vec));
+  const refs = (Array.isArray(p.refs) ? p.refs.filter(r => typeof r === 'string' && r.startsWith('q8:')) : []); refs.push(encVec(vec));
   while (refs.length > 5) refs.shift();
   bg(Store.patch('products', p.id, {refs}));
 }
@@ -678,23 +809,29 @@ async function backfill(){
   backfilling = true;
   try {
     for (const p of S.products) {
-      if (!p.photo || p.emb || backfillTried.has(p.id)) continue;
+      if (!p.photo || (p.emb && p.embModel === MODEL_ID) || backfillTried.has(p.id)) continue;
       backfillTried.add(p.id);
       const v = await vecFromSrc(p.photo);
-      if (v) bg(Store.patch('products', p.id, {emb: f32ToB64(v)}));
+      if (v) bg(Store.patch('products', p.id, {emb: encVec(v), embModel: MODEL_ID}));
       await sleep(30);
     }
   } finally { backfilling = false; }
 }
 
 /* ================= search ================= */
-function searchProducts(q, catId){
+const nameKey = new Map();
+const normName = p => { const k = nameKey.get(p.id); if (k && k[0] === p.name) return k[1]; const n = norm(p.name); nameKey.set(p.id, [p.name, n]); return n; };
+const pathOf = p => Array.isArray(p.path) ? p.path : [];
+const inPath = (p, sel) => sel.every((s, i) => pathOf(p)[i] === s);
+function searchProducts(q, catId, sel = [], saleOnly = false){
   const nq = norm(q), dq = digits(q), words = nq.split(' ').filter(Boolean);
   return S.products.filter(p => {
     if (catId && p.catId !== catId) return false;
+    if (sel.length && !inPath(p, sel)) return false;
+    if (saleOnly && !onSale(p)) return false;
     if (!q.trim()) return true;
-    if (words.length && words.every(w => norm(p.name).includes(w))) return true;
-    return dq.length >= 2 && digits(p.code).includes(dq);
+    if (words.length && words.every(w => normName(p).includes(w))) return true;
+    return dq.length >= 2 && (digits(p.code).includes(dq) || digits(p.sku).includes(dq));
   }).sort((a, b) => collator.compare(a.name || '', b.name || ''));
 }
 
@@ -708,7 +845,7 @@ function route(){
   if (prev.name === 'home' && next.name === 'cat') { S.homeScroll = window.scrollY; S.cameFromHome = true; }
   if (next.name === 'home') S.cameFromHome = false;
   const changed = prev.name !== next.name || prev.id !== next.id;
-  S.route = next; if (changed) S.q = '';
+  S.route = next; if (changed) { S.q = ''; S.sel = []; S.saleOnly = false; S.limit = PAGE; }
   renderShell();
   if (changed) window.scrollTo(0, next.name === 'home' ? S.homeScroll : 0);
 }
@@ -728,8 +865,8 @@ function searchBar(placeholder){
 }
 function bindSearch(){
   const q = $('#q'), clr = $('#clear-q');
-  q.addEventListener('input', () => { S.q = q.value; clr.classList.toggle('show', !!S.q); renderContent(); });
-  clr.addEventListener('click', () => { q.value = ''; S.q = ''; clr.classList.remove('show'); renderContent(); q.focus(); });
+  q.addEventListener('input', () => { S.q = q.value; S.limit = PAGE; clr.classList.toggle('show', !!S.q); renderContent(); });
+  clr.addEventListener('click', () => { q.value = ''; S.q = ''; S.limit = PAGE; clr.classList.remove('show'); renderContent(); q.focus(); });
   $('#btn-scan').addEventListener('click', openScanner);
 }
 
@@ -780,6 +917,7 @@ function renderShell(){
         ${can.edit() ? `<button class="add-btn" id="btn-add">${ICON.plus}Məhsul əlavə et</button>` : ''}
       </div>
       ${searchBar('Bu kateqoriyada axtar')}
+      <div id="filters"></div>
       <section id="content"></section>`;
     $('#back').onclick = () => { if (S.cameFromHome) history.back(); else location.hash = ''; };
     if ($('#btn-add')) $('#btn-add').onclick = () => openForm(null, {catId: S.route.id});
@@ -804,18 +942,79 @@ function renderShell(){
   renderContent();
 }
 
+function codeLine(p){
+  const code = fmtCode(p.code);
+  if (code) return `<span class="code">${esc(code)}</span>`;
+  if (p.sku) return `<span class="code none">${esc(storeName(p.src || HOME_STORE))} kodu ${esc(p.sku)}</span>`;
+  return `<span class="code none">Kod yoxdur</span>`;
+}
 function productCard(p, showCat){
-  const c = catById(p.catId), code = fmtCode(p.code);
+  const c = catById(p.catId), m = mainPrice(p);
   return `<button class="card" data-id="${esc(p.id)}" style="--t:${tintOf(c)}">
-    <span class="ph">${p.photo ? `<img src="${esc(p.photo)}" alt="" loading="lazy">` : esc(c ? c.emoji : '📦')}</span>
+    <span class="ph">${p.photo ? `<img src="${esc(p.photo)}" alt="" loading="lazy" decoding="async">` : esc(c ? c.emoji : '📦')}
+      ${m && m.s != null ? `<span class="off">−${offPct(m)}%</span>` : ''}</span>
     <span class="nm">${esc(p.name)}</span>
     ${priceTag(p)}
-    ${code ? `<span class="code">${esc(code)}</span>` : `<span class="code none">Kod yoxdur</span>`}
+    ${codeLine(p)}
     ${showCat && c ? `<span class="cat-chip">${esc(c.emoji)} ${esc(c.name)}</span>` : ''}
   </button>`;
 }
 function bindCards(root){
   $$('.card', root).forEach(b => b.addEventListener('click', () => { const p = S.products.find(x => x.id === b.dataset.id); if (p) openDetail(p); }));
+}
+/* a long list draws PAGE cards at a time; the rest come in as you scroll */
+function cardList(list, showCat){
+  const shown = list.slice(0, S.limit), rest = list.length - shown.length;
+  return `<div class="grid">${shown.map(p => productCard(p, showCat)).join('')}</div>`
+    + (rest > 0 ? `<button class="btn ghost wide more" id="more">Daha çox göstər (${rest} qalıb)</button>` : '');
+}
+let moreObs = null;
+function bindMore(box){
+  const b = $('#more', box); if (moreObs) { moreObs.disconnect(); moreObs = null; }
+  if (!b) return;
+  const go = () => { if (moreObs) { moreObs.disconnect(); moreObs = null; } S.limit += PAGE; renderContent(); };
+  b.onclick = go;
+  if ('IntersectionObserver' in window) {
+    moreObs = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) go(); }, {rootMargin: '600px 0px'});
+    moreObs.observe(b);
+  }
+}
+/* sub-category rows: Şirniyyat → Şirniyyat çəki → Karamel çəki → … ; plus "on sale" */
+function renderFilters(all){
+  const f = $('#filters'); if (!f) return;
+  const hasPath = all.some(p => pathOf(p).length), saleN = all.filter(onSale).length;
+  if (!hasPath && !saleN) { f.innerHTML = ''; return; }
+  const rows = [];
+  for (let lvl = 0; lvl <= S.sel.length && lvl < 6; lvl++) {
+    const base = all.filter(p => inPath(p, S.sel.slice(0, lvl)) && (!S.saleOnly || onSale(p)));
+    const counts = new Map();
+    for (const p of base) { const v = pathOf(p)[lvl]; if (v) counts.set(v, (counts.get(v) || 0) + 1); }
+    if (!counts.size || (counts.size === 1 && !S.sel[lvl] && lvl > 0)) break;
+    const opts = [...counts].sort((a, b) => collator.compare(a[0], b[0]));
+    const lead = lvl === 0 && saleN
+      ? `<button class="fchip sale" data-sale aria-pressed="${S.saleOnly}">Endirimdə <b>${all.filter(p => inPath(p, S.sel) && onSale(p)).length}</b></button>` : '';
+    rows.push(`<div class="frow ${lvl ? 'sub' : ''}" data-lvl="${lvl}" data-key="${esc(lvl + '|' + S.sel.slice(0, lvl).join('>'))}" role="group" aria-label="${lvl ? 'Alt kateqoriya' : 'Kateqoriya'}">${lead}
+      <button class="fchip" data-v="" aria-pressed="${!S.sel[lvl]}">Hamısı <b>${base.length}</b></button>
+      ${opts.map(([v, n]) => `<button class="fchip" data-v="${esc(v)}" aria-pressed="${S.sel[lvl] === v}">${esc(v)} <b>${n}</b></button>`).join('')}</div>`);
+  }
+  if (!hasPath && saleN) rows.push(`<div class="frow"><button class="fchip" data-sale-off aria-pressed="${!S.saleOnly}">Hamısı <b>${all.length}</b></button>
+    <button class="fchip sale" data-sale aria-pressed="${S.saleOnly}">Endirimdə <b>${saleN}</b></button></div>`);
+  const keep = new Map($$('.frow', f).map(r => [r.dataset.key, r.scrollLeft]));
+  f.innerHTML = rows.join('');
+  $$('.frow', f).forEach(r => {
+    const on = $('.fchip[data-v][aria-pressed="true"]', r);
+    if (keep.has(r.dataset.key)) r.scrollLeft = keep.get(r.dataset.key);
+    else if (on && on.dataset.v) r.scrollLeft = Math.max(0, on.offsetLeft - 40);
+  });
+  $$('.fchip', f).forEach(b => b.onclick = () => {
+    if (b.hasAttribute('data-sale')) S.saleOnly = !S.saleOnly;
+    else if (b.hasAttribute('data-sale-off')) S.saleOnly = false;
+    else {
+      const lvl = +b.closest('.frow').dataset.lvl;
+      S.sel = S.sel.slice(0, lvl); if (b.dataset.v) S.sel[lvl] = b.dataset.v;
+    }
+    S.limit = PAGE; renderContent();
+  });
 }
 function renderContent(){
   if (S.gate !== 'app') return;
@@ -830,20 +1029,27 @@ function renderContent(){
   if (S.route.name === 'cat') {
     const all = S.products.filter(p => p.catId === S.route.id);
     meta.textContent = all.length + ' məhsul';
+    if (S.sel.length && !all.some(p => inPath(p, S.sel))) S.sel = [];
+    renderFilters(all);
     if (!all.length) {
       box.innerHTML = `<div class="empty-state"><p>Bu kateqoriyada hələ məhsul yoxdur.</p>${can.edit() ? `<button class="btn" id="empty-add">${ICON.camera}Şəkil çəkib əlavə et</button>` : ''}</div>`;
       if ($('#empty-add')) $('#empty-add').onclick = () => openForm(null, {catId: S.route.id}); return;
     }
-    const list = searchProducts(S.q, S.route.id);
-    if (!list.length) { box.innerHTML = noResults(); bindNoResults(); return; }
-    box.innerHTML = `<div class="grid">${list.map(p => productCard(p)).join('')}</div>`; bindCards(box); return;
+    const list = searchProducts(S.q, S.route.id, S.sel, S.saleOnly);
+    if (!list.length) {
+      if (S.q.trim()) { box.innerHTML = noResults(); bindNoResults(); return; }
+      box.innerHTML = '<div class="empty-state"><p>Bu seçimdə məhsul yoxdur.</p></div>'; return;
+    }
+    const filtered = S.q.trim() || S.sel.length || S.saleOnly;
+    box.innerHTML = (filtered ? `<p class="meta" style="margin:0 0 10px">${list.length} məhsul</p>` : '') + cardList(list);
+    bindCards(box); bindMore(box); return;
   }
   meta.textContent = `${S.cats.length} kateqoriya, ${S.products.length} məhsul`;
   if (S.q.trim()) {
     const list = searchProducts(S.q);
     if (!list.length) { box.innerHTML = noResults(); bindNoResults(); return; }
-    box.innerHTML = `<p class="meta" style="margin:0 0 10px">${list.length} nəticə</p><div class="grid">${list.map(p => productCard(p, true)).join('')}</div>`;
-    bindCards(box); return;
+    box.innerHTML = `<p class="meta" style="margin:0 0 10px">${list.length} nəticə</p>${cardList(list, true)}`;
+    bindCards(box); bindMore(box); return;
   }
   if (!S.cats.length) {
     box.innerHTML = `<div class="empty-state"><p>Kateqoriya yoxdur.</p>${can.admin() ? '<button class="btn" id="mk-cats">Standart kateqoriyaları yarat</button>' : ''}</div>`;
@@ -873,28 +1079,54 @@ const live = new Set();
 function dataChanged(){ renderContent(); for (const f of live) f(); }
 
 /* ================= detail ================= */
+/* every shop, cheapest first, regular and sale price side by side */
+function priceTable(p){
+  const ps = pricesOf(p), keys = Object.keys(ps);
+  if (!keys.length) return can.edit() ? `<section class="det-prices"><div class="pt-head"><h3>Mağazalarda qiymət</h3>
+    <button class="link-btn" id="d-prices-edit">Qiymət yaz</button></div></section>` : '';
+  const rows = keys.map(k => ({k, ...ps[k]}))
+    .sort((a, b) => nowPrice(a) - nowPrice(b) || collator.compare(storeName(a.k), storeName(b.k)));
+  const best = nowPrice(rows[0]), several = rows.length > 1, u = UNIT_LABEL[p.unit] || 'kq';
+  const when = x => x.from || x.to ? [x.from, x.to].filter(Boolean).map(fmtDay).join(' – ') : x.at ? fmtDay(x.at) : '';
+  return `<section class="det-prices">
+    <div class="pt-head"><h3>Mağazalarda qiymət</h3>${can.edit() ? `<button class="link-btn" id="d-prices-edit">Dəyiş</button>` : ''}</div>
+    <table class="pt"><thead><tr><th scope="col">Mağaza</th><th scope="col">Endirimsiz</th><th scope="col">Endirimli</th></tr></thead><tbody>
+    ${rows.map(x => { const top = several && nowPrice(x) === best; return `<tr class="${top ? 'cheapest' : ''}">
+      <th scope="row"><span class="st">${esc(storeName(x.k))}</span>${top ? '<span class="cheap">Ən ucuz</span>' : ''}${when(x) ? `<small>${esc(when(x))}</small>` : ''}</th>
+      <td>${fmtPrice(x.r)} ₼</td>
+      <td>${x.s != null ? `<b>${fmtPrice(x.s)} ₼</b><span class="pct-off">−${offPct(x)}%</span>` : '<span class="none">—</span>'}</td></tr>`; }).join('')}
+    </tbody></table>
+    <p class="pt-unit">Qiymətlər 1 ${u} üçündür.</p>
+  </section>`;
+}
 function openDetail(p, opts = {}){
   const node = el(`<div class="overlay"><div class="scrim"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Məhsul"></div></div>`);
   const sheet = node.querySelector('.sheet');
   function draw(){
     const cur = S.products.find(x => x.id === p.id) || p, c = catById(cur.catId), code = fmtCode(cur.code);
+    const copyVal = code ? (digits(cur.code) || cur.code) : (cur.sku || '');
     sheet.style.setProperty('--t', tintOf(c));
     sheet.innerHTML = `
       <div class="grab"></div>
       <div class="sheet-bar"><span></span><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div>
       <div class="det-photo">${cur.photo ? `<img src="${esc(cur.photo)}" alt="${esc(cur.name)}">` : esc(c ? c.emoji : '📦')}</div>
-      <p class="det-cat">${c ? esc(c.emoji + ' ' + c.name) : 'Kateqoriyasız'}</p>
+      <p class="det-cat">${c ? esc(c.emoji + ' ' + c.name) : 'Kateqoriyasız'}${pathOf(cur).length ? ' › ' + pathOf(cur).map(esc).join(' › ') : ''}</p>
       <h2 class="det-name">${esc(cur.name)}</h2>
       <div class="det-price">${priceTag(cur)}</div>
-      <div class="det-code"><div><span class="lbl">Kod</span><span class="num">${code ? esc(code) : '—'}</span></div>
-        ${code ? `<button class="sq-btn" id="d-copy" aria-label="Kodu kopyala">${ICON.copy}</button>` : ''}</div>
+      <div class="det-code"><div><span class="lbl">${code || !cur.sku ? 'Kod' : esc(storeName(cur.src || HOME_STORE)) + ' kodu'}</span>
+        <span class="num ${!code && cur.sku ? 'sku' : ''}">${code ? esc(code) : cur.sku ? esc(cur.sku) : '—'}</span></div>
+        ${copyVal ? `<button class="sq-btn" id="d-copy" aria-label="Kodu kopyala">${ICON.copy}</button>` : ''}</div>
+      ${code && cur.sku ? `<p class="det-by">${esc(storeName(cur.src || HOME_STORE))} kodu: ${esc(cur.sku)}</p>` : ''}
+      ${priceTable(cur)}
       ${cur.createdBy ? `<p class="det-by">Əlavə edən: ${esc(cur.createdBy)}${cur.updatedBy && cur.updatedBy !== cur.createdBy ? `, son düzəliş: ${esc(cur.updatedBy)}` : ''}</p>` : ''}
       ${can.edit() ? `<div class="det-actions">
         <button class="btn ghost" id="d-edit">${ICON.edit}Düzəlt</button>
         ${can.del() ? `<button class="btn danger" id="d-del">${ICON.trash}Sil</button>` : ''}
       </div>` : ''}`;
     const cp = $('#d-copy', sheet);
-    if (cp) cp.onclick = async () => toast(await copyText(digits(cur.code) || cur.code) ? 'Kod kopyalandı' : 'Kopyalamaq olmadı');
+    if (cp) cp.onclick = async () => toast(await copyText(copyVal) ? 'Kod kopyalandı' : 'Kopyalamaq olmadı');
+    const pe = $('#d-prices-edit', sheet);
+    if (pe) pe.onclick = () => swapTop(buildForm(cur, {focusPrices: true}));
     if ($('#d-edit', sheet)) $('#d-edit', sheet).onclick = () => swapTop(buildForm(cur));
     if ($('#d-del', sheet)) $('#d-del', sheet).onclick = async () => {
       if (!await askConfirm(`«${cur.name}» silinsin?`, 'Sil', true)) return;
@@ -910,8 +1142,11 @@ function openDetail(p, opts = {}){
 /* ================= add / edit ================= */
 function buildForm(p, prefill = {}){
   const isNew = !p;
-  const d = p ? {...p} : {name: '', catId: S.cats[0] && S.cats[0].id, price: null, unit: 'kq', code: '', photo: '', ...prefill};
+  const d = p ? {...p} : {name: '', catId: S.cats[0] && S.cats[0].id, unit: 'kq', code: '', photo: '', ...prefill};
   if (!d.catId || !catById(d.catId)) d.catId = S.cats[0] && S.cats[0].id;
+  const oldPrices = p ? pricesOf(p) : {};
+  const storeIds = [...STORES.map(s => s.id), ...Object.keys(oldPrices).filter(k => !STORES.some(s => s.id === k))];
+  const pv = v => v != null ? esc(fmtPrice(v)) : '';
   const node = el(`<div class="overlay"><div class="scrim"></div><div class="sheet" role="dialog" aria-modal="true"></div></div>`);
   const sheet = node.querySelector('.sheet');
   sheet.innerHTML = `
@@ -930,14 +1165,23 @@ function buildForm(p, prefill = {}){
         <p class="warn" id="w-name" hidden>Adı yazın.</p></div>
       <div class="field"><label for="f-cat">Kateqoriya</label>
         <select class="inp" id="f-cat">${S.cats.map(c => `<option value="${esc(c.id)}" ${c.id === d.catId ? 'selected' : ''}>${esc(c.emoji + ' ' + c.name)}</option>`).join('')}</select></div>
-      <div class="field"><label for="f-price">Qiymət, ₼</label>
-        <div class="row"><input class="inp" id="f-price" inputmode="decimal" autocomplete="off" placeholder="0.00" value="${d.price != null && d.price !== '' ? esc(fmtPrice(d.price)) : ''}">
+      <div class="field" id="f-prices"><div class="lbl-row"><span class="flabel">Qiymətlər, ₼</span>
           <div class="seg" role="group" aria-label="Vahid">
             <button type="button" data-unit="kq" aria-pressed="${d.unit !== 'ed'}">kq</button>
             <button type="button" data-unit="ed" aria-pressed="${d.unit === 'ed'}">ədəd</button></div></div>
-        <p class="warn" id="w-price" hidden>Qiyməti rəqəmlə yazın, məs. 4.80</p></div>
+        <div class="pgrid">
+          <span></span><span class="pg-h">Endirimsiz</span><span class="pg-h">Endirimli</span><span></span>
+          ${storeIds.map(id => { const o = oldPrices[id] || {}; return `
+          <label class="pg-store" for="f-r-${esc(id)}">${esc(storeName(id))}</label>
+          <input class="inp" id="f-r-${esc(id)}" data-id="${esc(id)}" data-k="r" inputmode="decimal" autocomplete="off" placeholder="0.00" value="${pv(o.r)}">
+          <input class="inp" id="f-s-${esc(id)}" data-id="${esc(id)}" data-k="s" inputmode="decimal" autocomplete="off" placeholder="—" aria-label="${esc(storeName(id))}, endirimli qiymət" value="${pv(o.s)}">
+          <span class="pg-pct" id="f-p-${esc(id)}"></span>`; }).join('')}
+        </div>
+        <p class="hint">Endirim bitəndə endirimli xananı boşaldın.</p>
+        <p class="warn" id="w-price" hidden></p></div>
       <div class="field"><label for="f-code">Kod</label>
-        <input class="inp" id="f-code" inputmode="numeric" autocomplete="off" value="${esc(d.code)}" placeholder="Məs. 2717071"></div>
+        <input class="inp" id="f-code" inputmode="numeric" autocomplete="off" value="${esc(d.code)}" placeholder="Məs. 2717071">
+        ${d.sku ? `<p class="hint">${esc(storeName(d.src || HOME_STORE))} kodu: ${esc(d.sku)}</p>` : ''}</div>
       <div class="form-actions">
         <button type="button" class="btn ghost" data-close>Ləğv et</button>
         <button type="submit" class="btn" id="f-save">Yadda saxla</button>
@@ -950,32 +1194,58 @@ function buildForm(p, prefill = {}){
   const take = async kind => { const f = await pickFile(kind); if (!f) return; try { photo = await fileToPhoto(f); drawPhoto(); } catch (e) { toast('Şəkli açmaq olmadı'); } };
   box.onclick = () => take('cam'); $('#f-cam', sheet).onclick = () => take('cam'); $('#f-gal', sheet).onclick = () => take('gal');
   $$('.seg button', sheet).forEach(b => b.onclick = () => { unit = b.dataset.unit; $$('.seg button', sheet).forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
+  /* prices: blank = none; "4,80" works too */
+  const parse = raw => { const t = String(raw).trim().replace(',', '.'); if (!t) return {empty: true}; const v = Number(t); return isNaN(v) || v < 0 ? {bad: true} : {v: Math.round(v * 100) / 100}; };
+  const readStore = id => ({r: parse($('#f-r-' + CSS.escape(id), sheet).value), s: parse($('#f-s-' + CSS.escape(id), sheet).value)});
+  const drawPct = id => {
+    const {r, s} = readStore(id), out = $('#f-p-' + CSS.escape(id), sheet);
+    out.textContent = r.v != null && s.v != null && s.v < r.v ? '−' + Math.round((1 - s.v / r.v) * 100) + '%' : '';
+  };
+  storeIds.forEach(drawPct);
+  $$('.pgrid input', sheet).forEach(i => i.addEventListener('input', () => drawPct(i.dataset.id)));
+  if (prefill.focusPrices) setTimeout(() => { const t = $('#f-prices', sheet); t.scrollIntoView({block: 'start'}); }, 280);
   $('form', sheet).addEventListener('submit', async ev => {
     ev.preventDefault();
     const name = $('#f-name', sheet).value.trim(), code = $('#f-code', sheet).value.trim();
-    const priceRaw = $('#f-price', sheet).value.trim().replace(',', '.');
     $('#w-name', sheet).hidden = !!name;
-    const priceOk = !priceRaw || (!isNaN(priceRaw) && Number(priceRaw) >= 0);
-    $('#w-price', sheet).hidden = priceOk;
     if (!name) { $('#f-name', sheet).focus(); return; }
-    if (!priceOk) { $('#f-price', sheet).focus(); return; }
+    const prices = {}; let problem = null, where = null;
+    for (const id of storeIds) {
+      const {r, s} = readStore(id), nm = storeName(id);
+      if (r.bad || s.bad) { problem = `${nm}: qiyməti rəqəmlə yazın, məs. 4.80`; where = r.bad ? 'r' : 's'; }
+      else if (r.empty && !s.empty) { problem = `${nm}: əvvəlcə endirimsiz qiyməti yazın`; where = 'r'; }
+      else if (!s.empty && s.v >= r.v) { problem = `${nm}: endirimli qiymət endirimsizdən az olmalıdır`; where = 's'; }
+      if (problem) { $('#f-' + where + '-' + CSS.escape(id), sheet).focus(); break; }
+      if (r.empty) continue;
+      const old = (p && p.prices && p.prices[id]) || {}, before = oldPrices[id] || {};
+      const sv = s.empty ? null : s.v;
+      const same = before.r === r.v && (before.s ?? null) === sv;
+      const row = {...old, r: r.v, s: sv, at: same && old.at ? old.at : Date.now()};
+      if (!same) { delete row.from; delete row.to; }   // typed by hand: no longer the leaflet's dates
+      prices[id] = row;
+    }
+    const warn = $('#w-price', sheet); warn.hidden = !problem; warn.textContent = problem || '';
+    if (problem) return;
     const id = isNew ? uid() : p.id;
     const dup = digits(code) && S.products.find(x => x.id !== id && digits(x.code) === digits(code));
     if (dup && !await askConfirm(`Bu kod artıq «${dup.name}» məhsulundadır. Yenə də yadda saxlansın?`, 'Saxla')) return;
     const btn = $('#f-save', sheet); btn.disabled = true; btn.textContent = 'Saxlanılır…';
-    const item = {name, catId: $('#f-cat', sheet).value, price: priceRaw === '' ? null : Math.round(Number(priceRaw) * 100) / 100,
+    const home = prices[HOME_STORE] || prices[Object.keys(prices)[0]];
+    const item = {...(p || {}), name, catId: $('#f-cat', sheet).value, prices, price: home ? home.r : null,
       unit, code, photo, createdAt: (p && p.createdAt) || Date.now(), updatedAt: Date.now(),
       createdBy: (p && p.createdBy) || myEmail(), updatedBy: myEmail()};
+    delete item.id;
+    if (p && p.catId !== item.catId) item.path = [];   // sub-categories belong to the old category
     const samePhoto = p && p.photo === photo;
     item.sig = samePhoto && Array.isArray(p.sig) ? p.sig : null;
-    item.emb = samePhoto && p.emb ? p.emb : null;
+    item.emb = samePhoto && p.emb && p.embModel === MODEL_ID ? p.emb : null;
+    item.embModel = item.emb ? MODEL_ID : null;
     item.refs = samePhoto && Array.isArray(p.refs) ? p.refs : [];
     if (photo) {
       try {
         const img = await loadImage(photo);
         if (!item.sig) item.sig = sigFromImage(img);
-        if (!item.emb && embedder) { const v = vecFromCanvas(squareCanvas(img, AI_SIZE)); if (v) item.emb = f32ToB64(v); }
-        if (prefill.vec && isNew && item.emb === null) { /* model not ready: keep the scan vector as first example */ }
+        if (!item.emb && embedder) { const v = vecFromCanvas(squareCanvas(img, AI_SIZE)); if (v) { item.emb = encVec(v); item.embModel = MODEL_ID; } }
       } catch (e) {}
     }
     bg(Store.put('products', id, item));
@@ -1043,9 +1313,11 @@ function openScanner(){
 
   async function frameQuery(){
     const [vw, vh] = dims(video); if (!vw) return null;
-    const side = Math.min(vw, vh) * 0.75;
+    const side = Math.min(vw, vh) * 0.75, inner = side * 0.66;
     wctx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, AI_SIZE, AI_SIZE);
-    return {vec: vecFromCanvas(work), sig: sigFromImage(work)};
+    const vec = vecFromCanvas(work), sig = sigFromImage(work);
+    wctx.drawImage(video, (vw - inner) / 2, (vh - inner) / 2, inner, inner, 0, 0, AI_SIZE, AI_SIZE);
+    return {vec, vecs: [vec, vecFromCanvas(work)], sig};
   }
   async function loop(){
     if (stopped) return;
@@ -1063,7 +1335,7 @@ function openScanner(){
   function update(r){
     if (!S.products.some(p => p.photo)) { res.innerHTML = '<p class="live-hint">Hələ şəkilli məhsul yoxdur. Əvvəlcə məhsul əlavə edin.</p>'; return; }
     const top = r.list[0];
-    const v = top ? verdict(r.mode, top.score) : 'none';
+    const v = top ? verdict(r.mode, top.score, r.gap) : 'none';
     history3.push(v === 'none' ? null : top.p.id); if (history3.length > 3) history3.shift();
     const votes = history3.filter(id => top && id === top.p.id).length;
     if (v === 'none' || votes < 2) {
@@ -1087,8 +1359,9 @@ function openScanner(){
     try {
       const img = src instanceof Blob ? await imageFrom(src) : src;
       const photo = photoFrom(img, src instanceof Blob ? 1 : 0.75);
-      const cv = squareCanvas(img, AI_SIZE, src instanceof Blob ? 1 : 0.75);
-      openResults({photo, vec: vecFromCanvas(cv), sig: sigFromImage(cv)});
+      const full = src instanceof Blob ? 1 : 0.75;
+      const cv = squareCanvas(img, AI_SIZE, full), tight = squareCanvas(img, AI_SIZE, full * 0.66);
+      openResults({photo, vecs: [vecFromCanvas(cv), vecFromCanvas(tight)], sig: sigFromImage(cv)});
     } catch (e) { toast('Şəkli açmaq olmadı'); node._onresume(); }
   }
   $('#sc-shot', node).onclick = async () => {
@@ -1109,7 +1382,7 @@ function openResults(q){
   const body = $('#r-body', node);
   (async () => {
     const r = await rankQuery(q);
-    const top = r.list[0], v = top ? verdict(r.mode, top.score) : 'none';
+    const top = r.list[0], v = top ? verdict(r.mode, top.score, r.gap) : 'none';
     let status, best = null;
     if (!r.list.length) status = 'Müqayisə üçün şəkilli məhsul yoxdur.';
     else if (v === 'sure') { best = top.p; status = '<b>Məhsul tapıldı.</b>'; }
@@ -1124,7 +1397,7 @@ function openResults(q){
         ${can.edit() ? `<button class="btn" id="r-new">${ICON.plus}Yeni məhsul</button>` : ''}</div>`;
     $$('[data-id]', body).forEach(b => b.onclick = () => {
       const p = S.products.find(x => x.id === b.dataset.id); if (!p) return;
-      learn(p, q.vec); openDetail(p);
+      learn(p, (q.vecs || [q.vec])[0]); openDetail(p);
     });
     if ($('#r-new', body)) $('#r-new', body).onclick = () => swapTop(buildForm(null, {photo: q.photo, catId: S.route.name === 'cat' ? S.route.id : undefined}));
   })();
