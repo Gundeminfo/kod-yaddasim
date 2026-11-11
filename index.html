@@ -325,6 +325,8 @@ textarea.inp{height:110px;padding:10px 14px;resize:vertical;font-size:13px}
 .fchip.sale{border-color:color-mix(in srgb,var(--sale) 45%,var(--line));color:var(--sale)}
 .fchip.sale[aria-pressed="true"]{background:var(--sale);border-color:var(--sale);color:#fff}
 .more{margin-top:14px}
+
+.det-photo img.hd{object-fit:contain;background:#fff}
 </style>
 </head>
 <body>
@@ -360,9 +362,10 @@ const DEMO = new URLSearchParams(location.search).has('demo');
 const DEMO_ROLE = new URLSearchParams(location.search).get('role') || 'owner';
 const OWNER_EMAIL = 'maksizyevv@gmail.com';
 const ROLE_LABEL = {owner: 'Sahib', editor: 'Əlavə edə bilər', viewer: 'Yalnız baxır'};
-/* similarity thresholds. AI: cosine of the best match, plus how far it is ahead of the
-   runner-up (a clear winner at a modest score is still a sure match). Colour: fallback only. */
-const T = {vecShow: 0.15, vecSure: 0.45, vecClose: 0.25, vecMargin: 0.15, colShow: 0.40, colSure: 0.75};
+/* similarity thresholds, measured on the 711 Araz sweets with phone-like test shots.
+   AI: "sure" needs a good score AND a clear lead over the runner-up (look-alike packs score
+   high too); anything above vecShow is offered as a suggestion. Colour: fallback only. */
+const T = {vecShow: 0.30, vecSure: 0.60, vecSureGap: 0.12, vecClose: 0.50, vecMargin: 0.15, colShow: 0.40, colSure: 0.75};
 
 /* ================= helpers ================= */
 const $ = (s, r = document) => r.querySelector(s);
@@ -754,10 +757,11 @@ const dot = (a, b) => { if (!a || !b || a.length !== b.length) return -1; let t 
 const vecCache = new Map(), sigCache = new Map();
 /* only vectors made by the current model can be compared */
 function vecsOf(p){
-  const key = p.id + ':' + (p.updatedAt || 0) + ':' + (p.emb ? p.emb.length : 0) + ':' + (p.refs ? p.refs.length : 0) + ':' + vecDim + ':' + (p.embModel || '');
+  const key = p.id + ':' + (p.updatedAt || 0) + ':' + (p.emb ? p.emb.length : 0) + ':' + (p.emb2 ? 1 : 0) + ':' + (p.refs ? p.refs.length : 0) + ':' + vecDim + ':' + (p.embModel || '');
   let c = vecCache.get(p.id);
   if (c && c.key === key) return c.v;
-  const raw = [p.embModel === MODEL_ID ? p.emb : null, ...(Array.isArray(p.refs) ? p.refs : [])];
+  /* emb: whole pack shot; emb2: its close-up centre, closer to what the camera sees */
+  const raw = [p.embModel === MODEL_ID ? p.emb : null, p.embModel === MODEL_ID ? p.emb2 : null, ...(Array.isArray(p.refs) ? p.refs : [])];
   const v = raw.filter(Boolean).map(decVec).filter(x => x && x.length && (!vecDim || x.length === vecDim));
   vecCache.set(p.id, {key, v}); return v;
 }
@@ -789,7 +793,7 @@ async function rankQuery(q){
 /* gap = lead of the best match over the second; it only counts for the best one */
 function verdict(mode, score, gap = 0){
   if (mode === 'ai') {
-    if (score >= T.vecSure || (score >= T.vecClose && gap >= T.vecMargin)) return 'sure';
+    if ((score >= T.vecSure && gap >= T.vecSureGap) || (score >= T.vecClose && gap >= T.vecMargin)) return 'sure';
     return score >= T.vecShow ? 'maybe' : 'none';
   }
   return score >= T.colSure ? 'sure' : score >= T.colShow ? 'maybe' : 'none';
@@ -1079,6 +1083,7 @@ const live = new Set();
 function dataChanged(){ renderContent(); for (const f of live) f(); }
 
 /* ================= detail ================= */
+const hdReady = new Set();
 /* every shop, cheapest first, regular and sale price side by side */
 function priceTable(p){
   const ps = pricesOf(p), keys = Object.keys(ps);
@@ -1109,7 +1114,7 @@ function openDetail(p, opts = {}){
     sheet.innerHTML = `
       <div class="grab"></div>
       <div class="sheet-bar"><span></span><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div>
-      <div class="det-photo">${cur.photo ? `<img src="${esc(cur.photo)}" alt="${esc(cur.name)}">` : esc(c ? c.emoji : '📦')}</div>
+      <div class="det-photo">${cur.photo || cur.photoUrl ? `<img src="${esc(hdReady.has(cur.photoUrl) ? cur.photoUrl : cur.photo || cur.photoUrl)}" class="${hdReady.has(cur.photoUrl) ? 'hd' : ''}" alt="${esc(cur.name)}">` : esc(c ? c.emoji : '📦')}</div>
       <p class="det-cat">${c ? esc(c.emoji + ' ' + c.name) : 'Kateqoriyasız'}${pathOf(cur).length ? ' › ' + pathOf(cur).map(esc).join(' › ') : ''}</p>
       <h2 class="det-name">${esc(cur.name)}</h2>
       <div class="det-price">${priceTag(cur)}</div>
@@ -1123,6 +1128,12 @@ function openDetail(p, opts = {}){
         <button class="btn ghost" id="d-edit">${ICON.edit}Düzəlt</button>
         ${can.del() ? `<button class="btn danger" id="d-del">${ICON.trash}Sil</button>` : ''}
       </div>` : ''}`;
+    /* the shop's full-size photo replaces the small one once it has loaded */
+    if (cur.photoUrl && !hdReady.has(cur.photoUrl)) {
+      const big = new Image();
+      big.onload = () => { hdReady.add(cur.photoUrl); const im = $('.det-photo img', sheet); if (im) { im.src = cur.photoUrl; im.classList.add('hd'); } };
+      big.src = cur.photoUrl;
+    }
     const cp = $('#d-copy', sheet);
     if (cp) cp.onclick = async () => toast(await copyText(copyVal) ? 'Kod kopyalandı' : 'Kopyalamaq olmadı');
     const pe = $('#d-prices-edit', sheet);
@@ -1240,6 +1251,7 @@ function buildForm(p, prefill = {}){
     item.sig = samePhoto && Array.isArray(p.sig) ? p.sig : null;
     item.emb = samePhoto && p.emb && p.embModel === MODEL_ID ? p.emb : null;
     item.embModel = item.emb ? MODEL_ID : null;
+    if (!samePhoto) { item.emb2 = null; item.photoUrl = null; }
     item.refs = samePhoto && Array.isArray(p.refs) ? p.refs : [];
     if (photo) {
       try {
@@ -1345,7 +1357,7 @@ function openScanner(){
     frame.classList.add('hit');
     const key = top.p.id + ':' + v + ':' + pctOf(r.mode, top.score) + ':' + (top.p.updatedAt || 0);
     if (shown === key) return; shown = key;
-    const alts = r.list.slice(1, 3).filter(x => verdict(r.mode, x.score) !== 'none');
+    const alts = r.list.slice(1, 4).filter(x => verdict(r.mode, x.score) !== 'none');
     res.innerHTML = bestCard(top.p, v === 'sure' ? 'Tapıldı' : 'Ən oxşar', v !== 'sure', pctOf(r.mode, top.score))
       + (alts.length ? `<div class="live-alt">${alts.map(a => `<button data-id="${esc(a.p.id)}">${esc(a.p.name)}</button>`).join('')}</div>` : '');
     $$('[data-id]', res).forEach(b => b.onclick = () => {
