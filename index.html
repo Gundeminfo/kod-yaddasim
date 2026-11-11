@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Kod Yaddaşım">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -260,6 +260,19 @@ textarea.inp{height:110px;padding:10px 14px;resize:vertical;font-size:13px}
 .pct{font-size:12px;color:var(--muted);font-weight:600}
 .acct{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
 .acct span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+
+/* sign-in with password, members list */
+.gate .or{margin:2px 0;max-width:none;text-align:center;color:var(--muted);font-size:14px}
+.login-form{display:flex;flex-direction:column;gap:8px}
+.mem-add{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.mem-add .row .inp{flex:1}
+.mem-list{display:flex;flex-direction:column;gap:8px}
+.mem-row{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 12px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.mem-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.mem-row select.inp{width:auto;height:40px;padding:0 8px;font-size:14px}
+.mem-row .sq-btn{width:40px;height:40px;color:var(--danger)}
+.acct small{color:var(--muted);font-size:12px}
+.det-by{margin:12px 0 0;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -284,6 +297,9 @@ const FB_VER = '12.15.0';
 const MP_VERSIONS = ['1.2.2', '0.10.14'];
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_small/float32/1/mobilenet_v3_small.tflite';
 const DEMO = new URLSearchParams(location.search).has('demo');
+const DEMO_ROLE = new URLSearchParams(location.search).get('role') || 'owner';
+const OWNER_EMAIL = 'maksizyevv@gmail.com';
+const ROLE_LABEL = {owner: 'Sahib', editor: 'Əlavə edə bilər', viewer: 'Yalnız baxır'};
 /* similarity thresholds: AI vectors (cosine) and colour fallback */
 const T = {vecShow: 0.45, vecSure: 0.78, colShow: 0.40, colSure: 0.75};
 
@@ -395,6 +411,7 @@ const LocalStore = {
     this.emit(col);
   },
   async patch(col, id, fields){ return this.put(col, id, {...(this.mem[col] || {})[id], ...fields}); },
+  watchDoc(col, id, cb){ return this.subscribe(col, docs => cb(docs.find(d => d.id === id) || null, {fromCache: false})); },
   async remove(col, id){
     if (this.mem[col]) delete this.mem[col][id];
     await this.idbDo(s => s.delete(col + '/' + id));
@@ -424,6 +441,11 @@ async function loadFirebase(){
     put(col, id, data){ const b = {...data}; delete b.id; return fsM.setDoc(fsM.doc(db, col, id), b); },
     patch(col, id, fields){ return fsM.updateDoc(fsM.doc(db, col, id), fields); },
     remove(col, id){ return fsM.deleteDoc(fsM.doc(db, col, id)); },
+    watchDoc(col, id, cb, onErr){
+      return fsM.onSnapshot(fsM.doc(db, col, id),
+        s => cb(s.exists() ? {...s.data(), id: s.id} : null, {fromCache: s.metadata.fromCache}),
+        e => onErr && onErr(e));
+    },
   };
 }
 /* Firestore writes resolve only when the server confirms. The local cache shows
@@ -448,7 +470,15 @@ const S = {
   hasSettingsDoc: false,
   route: {name: 'home'}, cameFromHome: false, homeScroll: 0, q: '',
   ai: 'loading',   // loading | ready | error
+  role: null,      // owner | editor | viewer
+  members: [],
 };
+const can = {
+  edit: () => S.role === 'owner' || S.role === 'editor',
+  del: () => S.role === 'owner',
+  admin: () => S.role === 'owner',
+};
+const myEmail = () => String(S.user && S.user.email || '').trim().toLowerCase();
 try { const t = localStorage.getItem('ky-theme'); if (t) S.settings.theme = t; } catch (e) {}
 const catById = id => S.cats.find(c => c.id === id);
 const tintOf = c => TINTS[c && c.tint] || TINTS.stone;
@@ -635,7 +665,7 @@ function verdict(mode, score){
 }
 /* remember a confirmed scan as an extra example of that product */
 function learn(p, vec){
-  if (!vec || !p) return;
+  if (!vec || !p || !can.edit()) return;
   const vs = vecsOf(p); if (vs.some(v => dot(v, vec) > 0.96)) return;
   const refs = (Array.isArray(p.refs) ? p.refs.slice() : []); refs.push(f32ToB64(vec));
   while (refs.length > 5) refs.shift();
@@ -644,7 +674,7 @@ function learn(p, vec){
 /* products saved before the model was ready get their AI fingerprint now */
 const backfillTried = new Set(); let backfilling = false;
 async function backfill(){
-  if (backfilling || !embedder || !ready() || S.gate !== 'app') return;
+  if (backfilling || !embedder || !ready() || S.gate !== 'app' || !can.edit()) return;
   backfilling = true;
   try {
     for (const p of S.products) {
@@ -682,10 +712,11 @@ function route(){
   renderShell();
   if (changed) window.scrollTo(0, next.name === 'home' ? S.homeScroll : 0);
 }
+function localTheme(){ try { return localStorage.getItem('ky-theme-mine'); } catch (e) { return null; } }
 function applyTheme(){
-  document.documentElement.dataset.theme = S.settings.theme || 'nar';
+  document.documentElement.dataset.theme = (!can.admin() && localTheme()) || S.settings.theme || 'nar';
   document.title = S.settings.title || 'Kod Yaddaşım';
-  try { localStorage.setItem('ky-theme', S.settings.theme || 'nar'); } catch (e) {}
+  try { localStorage.setItem('ky-theme', document.documentElement.dataset.theme); } catch (e) {}
 }
 function searchBar(placeholder){
   return `<div class="searchbar">
@@ -707,14 +738,22 @@ function renderGate(){
   if (S.gate === 'loading') { app.innerHTML = `<section class="gate"><h1 class="title">${title}</h1><p>Yüklənir…</p></section>`; return; }
   if (S.gate === 'login') {
     app.innerHTML = `<section class="gate"><h1 class="title">${title}</h1>
-      <p>Məhsulların kodu, şəkli və qiyməti bir yerdə. Davam etmək üçün Google hesabınızla daxil olun.</p>
+      <p>Məhsulların kodu, şəkli və qiyməti bir yerdə. Davam etmək üçün daxil olun.</p>
       <button class="btn wide" id="g-in"><span class="g-logo">${ICON.google}</span>Google ilə daxil ol</button>
+      <p class="or">və ya</p>
+      <form class="login-form" id="g-form" novalidate>
+        <input class="inp" id="g-email" type="email" placeholder="E-poçt" autocomplete="username" autocapitalize="none" spellcheck="false">
+        <input class="inp" id="g-pass" type="password" placeholder="Şifrə" autocomplete="current-password">
+        <button class="btn ghost wide" type="submit" id="g-sub">Şifrə ilə daxil ol</button>
+      </form>
       ${S.gateMsg ? `<p class="note">${esc(S.gateMsg)}</p>` : ''}</section>`;
-    $('#g-in').onclick = signIn; return;
+    $('#g-in').onclick = signIn;
+    $('#g-form').addEventListener('submit', ev => { ev.preventDefault(); signInEmail($('#g-email').value.trim(), $('#g-pass').value); });
+    return;
   }
   if (S.gate === 'denied') {
     app.innerHTML = `<section class="gate"><h1 class="title">${title}</h1>
-      <p class="note">«${esc(S.user && S.user.email)}» hesabının bu bazaya icazəsi yoxdur.</p>
+      <p class="note">«${esc(S.user && S.user.email)}» hesabının bu bazaya icazəsi yoxdur. Proqramın sahibindən sizi siyahıya əlavə etməsini xahiş edin.</p>
       <button class="btn wide" id="g-out">Başqa hesabla daxil ol</button></section>`;
     $('#g-out').onclick = () => FBX.authM.signOut(FBX.auth); return;
   }
@@ -738,14 +777,15 @@ function renderShell(){
       </header>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px">
         <p class="meta" id="meta" style="margin:0"></p>
-        <button class="add-btn" id="btn-add">${ICON.plus}Məhsul əlavə et</button>
+        ${can.edit() ? `<button class="add-btn" id="btn-add">${ICON.plus}Məhsul əlavə et</button>` : ''}
       </div>
       ${searchBar('Bu kateqoriyada axtar')}
       <section id="content"></section>`;
     $('#back').onclick = () => { if (S.cameFromHome) history.back(); else location.hash = ''; };
-    $('#btn-add').onclick = () => openForm(null, {catId: S.route.id});
+    if ($('#btn-add')) $('#btn-add').onclick = () => openForm(null, {catId: S.route.id});
   } else {
-    const owner = (S.settings.owner || '').trim();
+    const owner = can.admin() ? (S.settings.owner || '').trim()
+      : ((S.user && S.user.displayName) ? S.user.displayName.split(' ')[0] : myEmail().split('@')[0]);
     app.innerHTML = `
       <header>
         <div class="hero-top">
@@ -782,7 +822,8 @@ function renderContent(){
   const box = $('#content'), meta = $('#meta'); if (!box) return;
   const status = $('#status');
   if (status) {
-    const msg = Store.mode === 'local' ? 'Demo rejimi: məlumatlar yalnız bu brauzerdə saxlanılır.' : '';
+    const msg = Store.mode === 'local' ? 'Demo rejimi: məlumatlar yalnız bu brauzerdə saxlanılır.'
+      : S.role === 'viewer' ? 'Siz məhsullara yalnız baxa bilərsiniz.' : '';
     status.innerHTML = msg ? `<p class="note">${esc(msg)}</p>` : '';
   }
   if (!ready()) { box.innerHTML = '<div class="loading">Yüklənir…</div>'; return; }
@@ -790,8 +831,8 @@ function renderContent(){
     const all = S.products.filter(p => p.catId === S.route.id);
     meta.textContent = all.length + ' məhsul';
     if (!all.length) {
-      box.innerHTML = `<div class="empty-state"><p>Bu kateqoriyada hələ məhsul yoxdur.</p><button class="btn" id="empty-add">${ICON.camera}Şəkil çəkib əlavə et</button></div>`;
-      $('#empty-add').onclick = () => openForm(null, {catId: S.route.id}); return;
+      box.innerHTML = `<div class="empty-state"><p>Bu kateqoriyada hələ məhsul yoxdur.</p>${can.edit() ? `<button class="btn" id="empty-add">${ICON.camera}Şəkil çəkib əlavə et</button>` : ''}</div>`;
+      if ($('#empty-add')) $('#empty-add').onclick = () => openForm(null, {catId: S.route.id}); return;
     }
     const list = searchProducts(S.q, S.route.id);
     if (!list.length) { box.innerHTML = noResults(); bindNoResults(); return; }
@@ -805,8 +846,8 @@ function renderContent(){
     bindCards(box); return;
   }
   if (!S.cats.length) {
-    box.innerHTML = `<div class="empty-state"><p>Kateqoriya yoxdur.</p><button class="btn" id="mk-cats">Standart kateqoriyaları yarat</button></div>`;
-    $('#mk-cats').onclick = () => { for (const c of DEFAULT_CATS) bg(Store.put('categories', c.id, c)); };
+    box.innerHTML = `<div class="empty-state"><p>Kateqoriya yoxdur.</p>${can.admin() ? '<button class="btn" id="mk-cats">Standart kateqoriyaları yarat</button>' : ''}</div>`;
+    if ($('#mk-cats')) $('#mk-cats').onclick = () => { for (const c of DEFAULT_CATS) bg(Store.put('categories', c.id, c)); };
     return;
   }
   const odd = S.cats.length % 2 === 1;
@@ -819,9 +860,10 @@ function renderContent(){
   }).join('')}</nav>`;
 }
 function noResults(){
-  return `<div class="empty-state"><p>«${esc(S.q.trim())}» tapılmadı.</p><button class="btn" id="nr-add">${ICON.plus}Bu adla məhsul əlavə et</button></div>`;
+  return `<div class="empty-state"><p>«${esc(S.q.trim())}» tapılmadı.</p>${can.edit() ? `<button class="btn" id="nr-add">${ICON.plus}Bu adla məhsul əlavə et</button>` : ''}</div>`;
 }
 function bindNoResults(){
+  if (!$('#nr-add')) return;
   $('#nr-add').onclick = () => {
     const q = S.q.trim(), isNum = digits(q).length === q.replace(/\s/g, '').length && digits(q).length >= 3;
     openForm(null, {catId: S.route.name === 'cat' ? S.route.id : undefined, ...(isNum ? {code: q} : {name: q})});
@@ -846,14 +888,15 @@ function openDetail(p, opts = {}){
       <div class="det-price">${priceTag(cur)}</div>
       <div class="det-code"><div><span class="lbl">Kod</span><span class="num">${code ? esc(code) : '—'}</span></div>
         ${code ? `<button class="sq-btn" id="d-copy" aria-label="Kodu kopyala">${ICON.copy}</button>` : ''}</div>
-      <div class="det-actions">
+      ${cur.createdBy ? `<p class="det-by">Əlavə edən: ${esc(cur.createdBy)}${cur.updatedBy && cur.updatedBy !== cur.createdBy ? `, son düzəliş: ${esc(cur.updatedBy)}` : ''}</p>` : ''}
+      ${can.edit() ? `<div class="det-actions">
         <button class="btn ghost" id="d-edit">${ICON.edit}Düzəlt</button>
-        <button class="btn danger" id="d-del">${ICON.trash}Sil</button>
-      </div>`;
+        ${can.del() ? `<button class="btn danger" id="d-del">${ICON.trash}Sil</button>` : ''}
+      </div>` : ''}`;
     const cp = $('#d-copy', sheet);
     if (cp) cp.onclick = async () => toast(await copyText(digits(cur.code) || cur.code) ? 'Kod kopyalandı' : 'Kopyalamaq olmadı');
-    $('#d-edit', sheet).onclick = () => swapTop(buildForm(cur));
-    $('#d-del', sheet).onclick = async () => {
+    if ($('#d-edit', sheet)) $('#d-edit', sheet).onclick = () => swapTop(buildForm(cur));
+    if ($('#d-del', sheet)) $('#d-del', sheet).onclick = async () => {
       if (!await askConfirm(`«${cur.name}» silinsin?`, 'Sil', true)) return;
       bg(Store.remove('products', cur.id)); closeTop(); toast('Silindi');
     };
@@ -921,7 +964,8 @@ function buildForm(p, prefill = {}){
     if (dup && !await askConfirm(`Bu kod artıq «${dup.name}» məhsulundadır. Yenə də yadda saxlansın?`, 'Saxla')) return;
     const btn = $('#f-save', sheet); btn.disabled = true; btn.textContent = 'Saxlanılır…';
     const item = {name, catId: $('#f-cat', sheet).value, price: priceRaw === '' ? null : Math.round(Number(priceRaw) * 100) / 100,
-      unit, code, photo, createdAt: (p && p.createdAt) || Date.now(), updatedAt: Date.now()};
+      unit, code, photo, createdAt: (p && p.createdAt) || Date.now(), updatedAt: Date.now(),
+      createdBy: (p && p.createdBy) || myEmail(), updatedBy: myEmail()};
     const samePhoto = p && p.photo === photo;
     item.sig = samePhoto && Array.isArray(p.sig) ? p.sig : null;
     item.emb = samePhoto && p.emb ? p.emb : null;
@@ -1077,45 +1121,110 @@ function openResults(q){
       ${best ? bestCard(best, v === 'sure' ? 'Tapıldı' : 'Ən oxşar', v !== 'sure', pctOf(r.mode, top.score)) : ''}
       ${others.length ? `<p class="rec-sub">${best ? 'Bu deyilsə' : 'Oxşar məhsullar'}</p><div class="pick-list">${others.map(miniRow).join('')}</div>` : ''}
       <div class="rec-actions"><button class="btn ghost" data-close>${ICON.scan}Yenidən skan</button>
-        <button class="btn" id="r-new">${ICON.plus}Yeni məhsul</button></div>`;
+        ${can.edit() ? `<button class="btn" id="r-new">${ICON.plus}Yeni məhsul</button>` : ''}</div>`;
     $$('[data-id]', body).forEach(b => b.onclick = () => {
       const p = S.products.find(x => x.id === b.dataset.id); if (!p) return;
       learn(p, q.vec); openDetail(p);
     });
-    $('#r-new', body).onclick = () => swapTop(buildForm(null, {photo: q.photo, catId: S.route.name === 'cat' ? S.route.id : undefined}));
+    if ($('#r-new', body)) $('#r-new', body).onclick = () => swapTop(buildForm(null, {photo: q.photo, catId: S.route.name === 'cat' ? S.route.id : undefined}));
   })();
 }
 
 /* ================= settings ================= */
 function saveSettings(patch){
+  if (!can.admin()) {
+    if (patch.theme) { try { localStorage.setItem('ky-theme-mine', patch.theme); } catch (e) {} }
+    renderShell(); return;
+  }
   S.settings = {...S.settings, ...patch}; renderShell();
   bg(Store.put('settings', 'app', S.settings));
 }
-function openSettings(){
+function openSettings(){ return can.admin() ? openOwnerSettings() : openMemberSettings(); }
+function themeChips(current){
+  return `<div class="chips" id="s-themes">${THEMES.map(t =>
+    `<button class="chip" data-theme-id="${t.id}" style="--c:${t.c}" aria-pressed="${current === t.id}"><i></i>${t.name}</button>`).join('')}</div>`;
+}
+function bindThemeChips(sheet){
+  $$('#s-themes .chip', sheet).forEach(b => b.onclick = () => {
+    $$('#s-themes .chip', sheet).forEach(x => x.setAttribute('aria-pressed', String(x === b))); saveSettings({theme: b.dataset.themeId});
+  });
+}
+const aiText = () => embedder ? 'Hazırdır. Skan telefonda işləyir, limitsizdir.' : S.ai === 'error' ? 'Model yüklənmədi. Skan rəngə görə işləyir. İnterneti yoxlayıb proqramı yenidən açın.' : 'Yüklənir…';
+function accountBlock(){
+  return S.user
+    ? `<div class="acct"><span>${esc(S.user.email || '')}<br><small>${esc(ROLE_LABEL[S.role] || '')}</small></span><button class="btn ghost" id="s-out" style="height:40px">Çıxış</button></div>`
+    : `<p class="store-state">Demo rejimi (${esc(ROLE_LABEL[S.role] || '')})</p>`;
+}
+function bindAccount(sheet){
+  const out = $('#s-out', sheet);
+  if (out) out.onclick = async () => { if (await askConfirm('Hesabdan çıxılsın?', 'Çıxış')) { closeTop(); FBX.authM.signOut(FBX.auth); } };
+}
+function openMemberSettings(){
   const node = el(`<div class="overlay"><div class="scrim"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Ayarlar"></div></div>`);
   const sheet = node.querySelector('.sheet');
-  const aiText = () => embedder ? 'Hazırdır. Skan telefonda işləyir, limitsizdir.' : S.ai === 'error' ? 'Model yüklənmədi. Skan rəngə görə işləyir. İnterneti yoxlayıb proqramı yenidən açın.' : 'Yüklənir…';
+  sheet.innerHTML = `
+    <div class="grab"></div>
+    <div class="sheet-bar"><h2>Ayarlar</h2><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div>
+    <section class="set-sec" style="margin-top:0"><h3>Rəng</h3>${themeChips(localTheme() || S.settings.theme || 'nar')}</section>
+    <section class="set-sec"><h3>Süni intellekt</h3><p class="store-state" id="s-ai">${aiText()}</p></section>
+    <section class="set-sec"><h3>Hesab</h3>${accountBlock()}</section>`;
+  bindThemeChips(sheet); bindAccount(sheet);
+  const refresh = () => { const ai = $('#s-ai', sheet); if (ai) ai.textContent = aiText(); };
+  live.add(refresh); node._onclose = () => live.delete(refresh);
+  pushOverlay(node);
+}
+function openOwnerSettings(){
+  const node = el(`<div class="overlay"><div class="scrim"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Ayarlar"></div></div>`);
+  const sheet = node.querySelector('.sheet');
   sheet.innerHTML = `
     <div class="grab"></div>
     <div class="sheet-bar"><h2>Ayarlar</h2><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div>
     <div class="field"><label for="s-owner">Adınız</label><input class="inp" id="s-owner" value="${esc(S.settings.owner || '')}" autocomplete="off"></div>
     <div class="field" style="margin-top:12px"><label for="s-title">Proqramın adı</label><input class="inp" id="s-title" value="${esc(S.settings.title || '')}" autocomplete="off"></div>
-    <section class="set-sec"><h3>Rəng</h3><div class="chips" id="s-themes">${THEMES.map(t =>
-      `<button class="chip" data-theme-id="${t.id}" style="--c:${t.c}" aria-pressed="${(S.settings.theme || 'nar') === t.id}"><i></i>${t.name}</button>`).join('')}</div></section>
+    <section class="set-sec"><h3>Rəng</h3>${themeChips(S.settings.theme || 'nar')}</section>
+    <section class="set-sec"><h3>İstifadəçilər</h3>
+      <p class="store-state">Siyahıdakı şəxslər proqrama daxil ola bilər. Siyahıdan silinən şəxsin girişi dərhal bağlanır.</p>
+      <form class="mem-add" id="s-memform" novalidate>
+        <input class="inp" id="s-mememail" type="email" placeholder="E-poçt, məs. test1@mehsulbazasi.az" autocomplete="off" autocapitalize="none" spellcheck="false">
+        <div class="row"><select class="inp" id="s-memrole"><option value="editor">Əlavə edə bilər</option><option value="viewer">Yalnız baxır</option></select>
+          <button class="btn" type="submit">Əlavə et</button></div>
+      </form>
+      <div class="mem-list" id="s-memlist"></div></section>
     <section class="set-sec"><h3>Kateqoriyalar</h3><div class="cat-rows" id="s-cats"></div>
       <button class="btn ghost wide" id="s-addcat" style="margin-top:10px">${ICON.plus}Kateqoriya əlavə et</button></section>
     <section class="set-sec"><h3>Süni intellekt</h3><p class="store-state" id="s-ai">${aiText()}</p></section>
-    <section class="set-sec"><h3>Hesab</h3>
-      ${S.user ? `<div class="acct"><span>${esc(S.user.email || '')}</span><button class="btn ghost" id="s-out" style="height:40px">Çıxış</button></div>` : '<p class="store-state">Demo rejimi</p>'}</section>
+    <section class="set-sec"><h3>Hesab</h3>${accountBlock()}</section>
     <section class="set-sec"><h3>Ehtiyat nüsxə</h3><div class="stack">
       <button class="btn ghost wide" id="s-export">${ICON.copy}Ehtiyat nüsxəni yüklə</button>
       <button class="btn ghost wide" id="s-import">Ehtiyat nüsxədən bərpa et</button></div></section>`;
   $('#s-owner', sheet).addEventListener('change', e => saveSettings({owner: e.target.value.trim()}));
   $('#s-title', sheet).addEventListener('change', e => saveSettings({title: e.target.value.trim() || 'Kod Yaddaşım'}));
-  $$('#s-themes .chip', sheet).forEach(b => b.onclick = () => {
-    $$('#s-themes .chip', sheet).forEach(x => x.setAttribute('aria-pressed', String(x === b))); saveSettings({theme: b.dataset.themeId});
+  bindThemeChips(sheet); bindAccount(sheet);
+  const memList = $('#s-memlist', sheet);
+  const drawMembers = () => {
+    if (memList.contains(document.activeElement)) return;
+    const ms = S.members.slice().sort((a, b) => collator.compare(a.id, b.id));
+    memList.innerHTML = ms.length ? ms.map(m => `<div class="mem-row" data-id="${esc(m.id)}"><span>${esc(m.id)}</span>
+        <select class="inp" aria-label="İcazə"><option value="editor" ${m.role !== 'viewer' ? 'selected' : ''}>Əlavə edə bilər</option><option value="viewer" ${m.role === 'viewer' ? 'selected' : ''}>Yalnız baxır</option></select>
+        <button class="sq-btn" aria-label="${esc(m.id)} sil">${ICON.trash}</button></div>`).join('')
+      : '<p class="store-state">Hələ heç kim əlavə olunmayıb.</p>';
+    $$('.mem-row', memList).forEach(r => {
+      const id = r.dataset.id;
+      $('select', r).addEventListener('change', e => bg(Store.patch('members', id, {role: e.target.value})));
+      $('.sq-btn', r).onclick = async () => {
+        if (await askConfirm(`«${id}» siyahıdan silinsin? Girişi dərhal bağlanacaq.`, 'Sil', true)) { bg(Store.remove('members', id)); toast('Silindi'); }
+      };
+    });
+  };
+  drawMembers();
+  $('#s-memform', sheet).addEventListener('submit', ev => {
+    ev.preventDefault();
+    const inp = $('#s-mememail', sheet), email = inp.value.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('E-poçtu düzgün yazın'); inp.focus(); return; }
+    if (email === OWNER_EMAIL) { toast('Bu, sizin öz hesabınızdır'); return; }
+    bg(Store.put('members', email, {role: $('#s-memrole', sheet).value, addedAt: Date.now()}));
+    inp.value = ''; toast('Əlavə olundu');
   });
-  const out = $('#s-out', sheet); if (out) out.onclick = async () => { if (await askConfirm('Hesabdan çıxılsın?', 'Çıxış')) { closeTop(); FBX.authM.signOut(FBX.auth); } };
   const rows = $('#s-cats', sheet);
   const drawCats = () => {
     const ai = $('#s-ai', sheet); if (ai) ai.textContent = aiText();
@@ -1158,13 +1267,33 @@ function openSettings(){
     for (const p of data.products) bg(Store.put('products', p.id, p));
     toast('Bərpa olundu');
   };
-  live.add(drawCats); node._onclose = () => live.delete(drawCats);
+  const refreshAll = () => { drawCats(); drawMembers(); };
+  live.add(refreshAll); node._onclose = () => live.delete(refreshAll);
   pushOverlay(node);
 }
 
 /* ================= auth + data ================= */
-let unsubs = [];
-function stopData(){ unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = []; S.got = {categories: false, products: false, settings: false}; S.synced = {categories: false, settings: false}; }
+let unsubs = [], memberUnsub = null;
+function stopData(){ unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = []; S.got = {categories: false, products: false, settings: false}; S.synced = {categories: false, settings: false}; S.members = []; }
+function stopMember(){ if (memberUnsub) { try { memberUnsub(); } catch (e) {} memberUnsub = null; } }
+/* decide who this person is: the owner, someone on the list, or nobody */
+function onUser(user){
+  stopData(); stopMember(); S.user = user; S.role = null;
+  if (!user) { S.gate = 'login'; renderShell(); return; }
+  S.gateMsg = '';
+  const email = myEmail();
+  if (email === OWNER_EMAIL && user.emailVerified) { S.role = 'owner'; startData(); return; }
+  S.gate = 'loading'; renderShell();
+  memberUnsub = Store.watchDoc('members', email, (m, meta) => {
+    if (!m) {
+      if (meta && meta.fromCache) return;            // wait for the server's answer
+      S.role = null; stopData(); S.gate = 'denied'; renderShell(); return;
+    }
+    const role = m.role === 'viewer' ? 'viewer' : 'editor';
+    const changed = S.role !== role; S.role = role;
+    if (S.gate !== 'app') startData(); else if (changed) { renderShell(); dataChanged(); }
+  }, () => { S.role = null; stopData(); S.gate = 'denied'; renderShell(); });
+}
 function startData(){
   stopData();
   S.gate = 'app'; renderShell();
@@ -1180,6 +1309,7 @@ function startData(){
     if (S.route.name === 'cat') renderShell(); else dataChanged();
   }, onErr));
   unsubs.push(Store.subscribe('products', docs => { S.products = docs; S.got.products = true; dataChanged(); backfill(); }, onErr));
+  if (can.admin()) unsubs.push(Store.subscribe('members', docs => { S.members = docs; for (const f of live) f(); }, () => {}));
   unsubs.push(Store.subscribe('settings', (docs, meta) => {
     const s = docs.find(d => d.id === 'app');
     S.got.settings = true; if (!meta.fromCache) S.synced.settings = true;
@@ -1195,7 +1325,7 @@ function startData(){
 /* first run on an empty database: categories + the two products from the old app */
 let seeded = false;
 function maybeSeed(){
-  if (seeded || !S.synced.categories || !S.synced.settings) return;
+  if (seeded || !can.admin() || !S.synced.categories || !S.synced.settings) return;
   seeded = true;
   if (S.cats.length || S.hasSettingsDoc) return;
   for (const c of DEFAULT_CATS) bg(Store.put('categories', c.id, c));
@@ -1209,6 +1339,20 @@ function authMsg(e){
   if (code.includes('network-request-failed')) return 'İnternet bağlantısı yoxdur.';
   if (code.includes('popup-blocked')) return 'Brauzer giriş pəncərəsini blokladı. Pop-up icazəsi verin və yenidən basın.';
   return 'Giriş alınmadı (' + (code || 'xəta') + ').';
+}
+function emailAuthMsg(e){
+  const code = String(e && e.code || '');
+  if (/invalid-credential|wrong-password|user-not-found|invalid-email|missing-password/.test(code)) return 'E-poçt və ya şifrə səhvdir.';
+  if (code.includes('user-disabled')) return 'Bu hesab bağlanıb.';
+  if (code.includes('too-many-requests')) return 'Çox cəhd oldu. Bir az sonra yenidən yoxlayın.';
+  if (code.includes('operation-not-allowed')) return 'Firebase-də şifrə ilə giriş aktiv deyil.';
+  return authMsg(e);
+}
+async function signInEmail(email, pass){
+  if (!email || !pass) { S.gateMsg = 'E-poçtu və şifrəni yazın.'; renderShell(); return; }
+  const btn = $('#g-sub'); if (btn) { btn.disabled = true; btn.textContent = 'Yoxlanılır…'; }
+  try { await FBX.authM.signInWithEmailAndPassword(FBX.auth, email, pass); }
+  catch (e) { S.gateMsg = emailAuthMsg(e); renderShell(); }
 }
 async function signIn(){
   const {authM, auth} = FBX;
@@ -1228,15 +1372,15 @@ async function signIn(){
 async function boot(){
   S.route = parseHash(); renderShell();
   getEmbedder().then(() => { S.ai = 'ready'; dataChanged(); backfill(); }, () => { S.ai = 'error'; dataChanged(); });
-  if (DEMO) { await LocalStore.init(); Store = LocalStore; seedDemo(); startData(); return; }
+  if (DEMO) {
+    await LocalStore.init(); Store = LocalStore; seedDemo();
+    S.role = ['owner', 'editor', 'viewer'].includes(DEMO_ROLE) ? DEMO_ROLE : 'owner';
+    startData(); return;
+  }
   try { await loadFirebase(); }
   catch (e) { S.gate = 'error'; S.gateMsg = 'Proqram yüklənmədi. İnterneti yoxlayıb yenidən açın.'; renderShell(); return; }
   try { await FBX.authM.getRedirectResult(FBX.auth); } catch (e) { S.gateMsg = authMsg(e); }
-  FBX.authM.onAuthStateChanged(FBX.auth, user => {
-    S.user = user;
-    if (!user) { stopData(); S.gate = 'login'; renderShell(); return; }
-    S.gateMsg = ''; startData();
-  });
+  FBX.authM.onAuthStateChanged(FBX.auth, onUser);
 }
 function seedDemo(){
   if (LocalStore.list('categories').length) return;
