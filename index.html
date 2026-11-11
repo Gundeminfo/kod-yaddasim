@@ -410,6 +410,14 @@ function pricesOf(p){
   return out;
 }
 const nowPrice = x => x.s != null ? x.s : x.r;
+/* each shop's own product code; older Araz imports kept theirs in p.sku */
+function codesOf(p){
+  const c = {...(p.codes && typeof p.codes === 'object' ? p.codes : {})};
+  if (p.sku && !c[p.src || HOME_STORE]) c[p.src || HOME_STORE] = p.sku;
+  for (const k of Object.keys(c)) if (!c[k]) delete c[k];
+  return c;
+}
+const storesOf = p => Object.keys(pricesOf(p));
 const offPct = x => x.s != null && x.r ? Math.round((1 - x.s / x.r) * 100) : 0;
 function mainPrice(p){ const ps = pricesOf(p); return ps[HOME_STORE] || ps[Object.keys(ps).sort()[0]] || null; }
 const onSale = p => Object.values(pricesOf(p)).some(x => x.s != null);
@@ -560,7 +568,7 @@ const S = {
   got: {categories: false, products: false, settings: false}, synced: {categories: false, settings: false},
   hasSettingsDoc: false,
   route: {name: 'home'}, cameFromHome: false, homeScroll: 0, q: '',
-  sel: [], saleOnly: false, limit: PAGE,   // category filters: chosen sub-category path, sale only, cards shown
+  sel: [], saleOnly: false, shop: null, limit: PAGE,   // category filters: chosen sub-category path, sale only, cards shown
   ai: 'loading',   // loading | ready | error
   role: null,      // owner | editor | viewer
   members: [],
@@ -713,6 +721,8 @@ function sigFromImage(img){
   const n = SIG_N * SIG_N;
   return Array.from(H, x => Math.round(x / n * 1000) / 1000);
 }
+/* photos kept inside the database; shop photos linked from other sites cannot be read pixel by pixel */
+const ownPhoto = p => typeof p.photo === 'string' && p.photo.startsWith('data:');
 const sigSim = (a, b) => { let t = 0; for (let i = 0; i < a.length; i++) t += Math.min(a[i], b[i] || 0); return t; };
 
 let embedder = null, embP = null;
@@ -806,7 +816,7 @@ async function rankQuery(q){
     return {mode: 'ai', list: out, gap: out.length > 1 ? out[0].score - out[1].score : 1};
   }
   if (q.sig) {
-    for (const p of S.products) { if (!p.photo) continue; const sg = await sigOf(p); if (sg) out.push({p, score: sigSim(q.sig, sg)}); }
+    for (const p of S.products) { if (!ownPhoto(p)) continue; const sg = await sigOf(p); if (sg) out.push({p, score: sigSim(q.sig, sg)}); }
   }
   out.sort((a, b) => b.score - a.score);
   return {mode: 'color', list: out, gap: out.length > 1 ? out[0].score - out[1].score : 1};
@@ -834,7 +844,7 @@ async function backfill(){
   backfilling = true;
   try {
     for (const p of S.products) {
-      if (!p.photo || (p.emb && p.embModel === MODEL_ID) || backfillTried.has(p.id)) continue;
+      if (!ownPhoto(p) || (p.emb && p.embModel === MODEL_ID) || backfillTried.has(p.id)) continue;
       backfillTried.add(p.id);
       const v = await vecFromSrc(p.photo);
       if (v) bg(Store.patch('products', p.id, {emb: encVec(v), embModel: MODEL_ID}));
@@ -848,15 +858,16 @@ const nameKey = new Map();
 const normName = p => { const k = nameKey.get(p.id); if (k && k[0] === p.name) return k[1]; const n = norm(p.name); nameKey.set(p.id, [p.name, n]); return n; };
 const pathOf = p => Array.isArray(p.path) ? p.path : [];
 const inPath = (p, sel) => sel.every((s, i) => pathOf(p)[i] === s);
-function searchProducts(q, catId, sel = [], saleOnly = false){
+function searchProducts(q, catId, sel = [], saleOnly = false, shop = null){
   const nq = norm(q), dq = digits(q), words = nq.split(' ').filter(Boolean);
   return S.products.filter(p => {
     if (catId && p.catId !== catId) return false;
     if (sel.length && !inPath(p, sel)) return false;
     if (saleOnly && !onSale(p)) return false;
+    if (shop && !pricesOf(p)[shop]) return false;
     if (!q.trim()) return true;
     if (words.length && words.every(w => normName(p).includes(w))) return true;
-    return dq.length >= 2 && (digits(p.code).includes(dq) || digits(p.sku).includes(dq));
+    return dq.length >= 2 && (digits(p.code).includes(dq) || Object.values(codesOf(p)).some(c => digits(c).includes(dq)));
   }).sort((a, b) => collator.compare(a.name || '', b.name || ''));
 }
 
@@ -870,7 +881,7 @@ function route(){
   if (prev.name === 'home' && next.name === 'cat') { S.homeScroll = window.scrollY; S.cameFromHome = true; }
   if (next.name === 'home') S.cameFromHome = false;
   const changed = prev.name !== next.name || prev.id !== next.id;
-  S.route = next; if (changed) { S.q = ''; S.sel = []; S.saleOnly = false; S.limit = PAGE; }
+  S.route = next; if (changed) { S.q = ''; S.sel = []; S.saleOnly = false; S.shop = null; S.limit = PAGE; }
   renderShell();
   if (changed) window.scrollTo(0, next.name === 'home' ? S.homeScroll : 0);
 }
@@ -970,7 +981,8 @@ function renderShell(){
 function codeLine(p){
   const code = fmtCode(p.code);
   if (code) return `<span class="code">${esc(code)}</span>`;
-  if (p.sku) return `<span class="code none">${esc(storeName(p.src || HOME_STORE))} kodu ${esc(p.sku)}</span>`;
+  const cs = codesOf(p), k = cs[HOME_STORE] ? HOME_STORE : Object.keys(cs)[0];
+  if (k) return `<span class="code none">${esc(storeName(k))} kodu ${esc(cs[k])}</span>`;
   return `<span class="code none">Kod yoxdur</span>`;
 }
 function productCard(p, showCat){
@@ -1005,11 +1017,18 @@ function bindMore(box){
   }
 }
 /* sub-category rows: Şirniyyat → Şirniyyat çəki → Karamel çəki → … ; plus "on sale" */
-function renderFilters(all){
+function renderFilters(allCat){
   const f = $('#filters'); if (!f) return;
+  const shopN = {}; for (const p of allCat) for (const k of storesOf(p)) shopN[k] = (shopN[k] || 0) + 1;
+  const shops = Object.keys(shopN).sort((a, b) => STORES.findIndex(s => s.id === a) - STORES.findIndex(s => s.id === b));
+  if (S.shop && !shopN[S.shop]) S.shop = null;
+  const all = S.shop ? allCat.filter(p => pricesOf(p)[S.shop]) : allCat;
   const hasPath = all.some(p => pathOf(p).length), saleN = all.filter(onSale).length;
-  if (!hasPath && !saleN) { f.innerHTML = ''; return; }
+  if (!hasPath && !saleN && shops.length < 2) { f.innerHTML = ''; return; }
   const rows = [];
+  if (shops.length > 1) rows.push(`<div class="frow shops" data-key="shops" role="group" aria-label="Mağaza">
+    <button class="fchip" data-shop="" aria-pressed="${!S.shop}">Bütün mağazalar <b>${allCat.length}</b></button>
+    ${shops.map(k => `<button class="fchip" data-shop="${esc(k)}" aria-pressed="${S.shop === k}">${esc(storeName(k))} <b>${shopN[k]}</b></button>`).join('')}</div>`);
   for (let lvl = 0; lvl <= S.sel.length && lvl < 6; lvl++) {
     const base = all.filter(p => inPath(p, S.sel.slice(0, lvl)) && (!S.saleOnly || onSale(p)));
     const counts = new Map();
@@ -1032,7 +1051,8 @@ function renderFilters(all){
     else if (on && on.dataset.v) r.scrollLeft = Math.max(0, on.offsetLeft - 40);
   });
   $$('.fchip', f).forEach(b => b.onclick = () => {
-    if (b.hasAttribute('data-sale')) S.saleOnly = !S.saleOnly;
+    if (b.hasAttribute('data-shop')) { S.shop = b.dataset.shop || null; S.sel = []; }
+    else if (b.hasAttribute('data-sale')) S.saleOnly = !S.saleOnly;
     else if (b.hasAttribute('data-sale-off')) S.saleOnly = false;
     else {
       const lvl = +b.closest('.frow').dataset.lvl;
@@ -1060,12 +1080,12 @@ function renderContent(){
       box.innerHTML = `<div class="empty-state"><p>Bu kateqoriyada hələ məhsul yoxdur.</p>${can.edit() ? `<button class="btn" id="empty-add">${ICON.camera}Şəkil çəkib əlavə et</button>` : ''}</div>`;
       if ($('#empty-add')) $('#empty-add').onclick = () => openForm(null, {catId: S.route.id}); return;
     }
-    const list = searchProducts(S.q, S.route.id, S.sel, S.saleOnly);
+    const list = searchProducts(S.q, S.route.id, S.sel, S.saleOnly, S.shop);
     if (!list.length) {
       if (S.q.trim()) { box.innerHTML = noResults(); bindNoResults(); return; }
       box.innerHTML = '<div class="empty-state"><p>Bu seçimdə məhsul yoxdur.</p></div>'; return;
     }
-    const filtered = S.q.trim() || S.sel.length || S.saleOnly;
+    const filtered = S.q.trim() || S.sel.length || S.saleOnly || S.shop;
     box.innerHTML = (filtered ? `<p class="meta" style="margin:0 0 10px">${list.length} məhsul</p>` : '') + cardList(list);
     bindCards(box); bindMore(box); return;
   }
@@ -1112,13 +1132,13 @@ function priceTable(p){
     <button class="link-btn" id="d-prices-edit">Qiymət yaz</button></div></section>` : '';
   const rows = keys.map(k => ({k, ...ps[k]}))
     .sort((a, b) => nowPrice(a) - nowPrice(b) || collator.compare(storeName(a.k), storeName(b.k)));
-  const best = nowPrice(rows[0]), several = rows.length > 1, u = UNIT_LABEL[p.unit] || 'kq';
+  const best = nowPrice(rows[0]), several = rows.length > 1, u = UNIT_LABEL[p.unit] || 'kq', codes = codesOf(p);
   const when = x => x.from || x.to ? [x.from, x.to].filter(Boolean).map(fmtDay).join(' – ') : x.at ? fmtDay(x.at) : '';
   return `<section class="det-prices">
     <div class="pt-head"><h3>Mağazalarda qiymət</h3>${can.edit() ? `<button class="link-btn" id="d-prices-edit">Dəyiş</button>` : ''}</div>
     <table class="pt"><thead><tr><th scope="col">Mağaza</th><th scope="col">Endirimsiz</th><th scope="col">Endirimli</th></tr></thead><tbody>
     ${rows.map(x => { const top = several && nowPrice(x) === best; return `<tr class="${top ? 'cheapest' : ''}">
-      <th scope="row"><span class="st">${esc(storeName(x.k))}</span>${top ? '<span class="cheap">Ən ucuz</span>' : ''}${when(x) ? `<small>${esc(when(x))}</small>` : ''}</th>
+      <th scope="row"><span class="st">${esc(storeName(x.k))}</span>${top ? '<span class="cheap">Ən ucuz</span>' : ''}${codes[x.k] ? `<small>Kod ${esc(codes[x.k])}</small>` : ''}${when(x) ? `<small>${esc(when(x))}</small>` : ''}</th>
       <td>${fmtPrice(x.r)} ₼</td>
       <td>${x.s != null ? `<b>${fmtPrice(x.s)} ₼</b><span class="pct-off">−${offPct(x)}%</span>` : '<span class="none">—</span>'}</td></tr>`; }).join('')}
     </tbody></table>
@@ -1130,7 +1150,8 @@ function openDetail(p, opts = {}){
   const sheet = node.querySelector('.sheet');
   function draw(){
     const cur = S.products.find(x => x.id === p.id) || p, c = catById(cur.catId), code = fmtCode(cur.code);
-    const copyVal = code ? (digits(cur.code) || cur.code) : (cur.sku || '');
+    const cs = codesOf(cur), ck = cs[HOME_STORE] ? HOME_STORE : Object.keys(cs)[0], storeCode = ck ? cs[ck] : '';
+    const copyVal = code ? (digits(cur.code) || cur.code) : storeCode;
     sheet.style.setProperty('--t', tintOf(c));
     sheet.innerHTML = `
       <div class="grab"></div>
@@ -1139,10 +1160,9 @@ function openDetail(p, opts = {}){
       <p class="det-cat">${c ? esc(c.emoji + ' ' + c.name) : 'Kateqoriyasız'}${pathOf(cur).length ? ' › ' + pathOf(cur).map(esc).join(' › ') : ''}</p>
       <h2 class="det-name">${esc(cur.name)}</h2>
       <div class="det-price">${priceTag(cur)}</div>
-      <div class="det-code"><div><span class="lbl">${code || !cur.sku ? 'Kod' : esc(storeName(cur.src || HOME_STORE)) + ' kodu'}</span>
-        <span class="num ${!code && cur.sku ? 'sku' : ''}">${code ? esc(code) : cur.sku ? esc(cur.sku) : '—'}</span></div>
+      <div class="det-code"><div><span class="lbl">${code || !storeCode ? 'Kod' : esc(storeName(ck)) + ' kodu'}</span>
+        <span class="num ${!code && storeCode ? 'sku' : ''}">${code ? esc(code) : storeCode ? esc(storeCode) : '—'}</span></div>
         ${copyVal ? `<button class="sq-btn" id="d-copy" aria-label="Kodu kopyala">${ICON.copy}</button>` : ''}</div>
-      ${code && cur.sku ? `<p class="det-by">${esc(storeName(cur.src || HOME_STORE))} kodu: ${esc(cur.sku)}</p>` : ''}
       ${priceTable(cur)}
       ${cur.createdBy ? `<p class="det-by">Əlavə edən: ${esc(cur.createdBy)}${cur.updatedBy && cur.updatedBy !== cur.createdBy ? `, son düzəliş: ${esc(cur.updatedBy)}` : ''}</p>` : ''}
       ${can.edit() ? `<div class="det-actions">
@@ -1217,7 +1237,7 @@ function buildForm(p, prefill = {}){
         <p class="warn" id="w-price" hidden></p></div>
       <div class="field"><label for="f-code">Kod</label>
         <input class="inp" id="f-code" inputmode="numeric" autocomplete="off" value="${esc(d.code)}" placeholder="Məs. 2717071">
-        ${d.sku ? `<p class="hint">${esc(storeName(d.src || HOME_STORE))} kodu: ${esc(d.sku)}</p>` : ''}</div>
+        ${Object.keys(codesOf(d)).length ? `<p class="hint">${Object.entries(codesOf(d)).map(([k, v]) => esc(storeName(k)) + ' kodu: ' + esc(v)).join(', ')}</p>` : ''}</div>
       <div class="form-actions">
         <button type="button" class="btn ghost" data-close>Ləğv et</button>
         <button type="submit" class="btn" id="f-save">Yadda saxla</button>
@@ -1278,7 +1298,7 @@ function buildForm(p, prefill = {}){
     item.embModel = item.emb ? MODEL_ID : null;
     if (!samePhoto) { item.emb2 = null; item.photoUrl = null; }
     item.refs = samePhoto && Array.isArray(p.refs) ? p.refs : [];
-    if (photo) {
+    if (photo && photo.startsWith('data:')) {
       try {
         const img = await loadImage(photo);
         if (!item.sig) item.sig = sigFromImage(img);
@@ -1370,7 +1390,7 @@ function openScanner(){
     timer = setTimeout(loop, embedder ? 220 : 350);
   }
   function update(r){
-    if (!S.products.some(p => p.photo)) { res.innerHTML = '<p class="live-hint">Hələ şəkilli məhsul yoxdur. Əvvəlcə məhsul əlavə edin.</p>'; return; }
+    if (!S.products.some(ownPhoto)) { res.innerHTML = '<p class="live-hint">Hələ şəkilli məhsul yoxdur. Əvvəlcə məhsul əlavə edin.</p>'; return; }
     const top = r.list[0];
     const v = top ? verdict(r.mode, top.score, r.gap) : 'none';
     history3.push(v === 'none' ? null : top.p.id); if (history3.length > 3) history3.shift();
