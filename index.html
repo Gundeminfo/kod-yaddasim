@@ -327,6 +327,14 @@ textarea.inp{height:110px;padding:10px 14px;resize:vertical;font-size:13px}
 .more{margin-top:14px}
 
 .det-photo img.hd{object-fit:contain;background:#fff}
+
+/* photos: own pictures fill the frame; other shops' pictures sit whole on white */
+.ph,.det-photo{position:relative}
+.ph-emo{font-style:normal;line-height:1}
+.ph img,.det-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#fff}
+.ph img.ext,.det-photo img.ext{object-fit:contain;padding:6%}
+.ph img.ext.lowres{padding:18%}
+.det-photo img.ext.lowres{padding:20%}
 </style>
 </head>
 <body>
@@ -987,10 +995,22 @@ function codeLine(p){
   if (k) return `<span class="code none">${esc(storeName(k))} kodu ${esc(cs[k])}</span>`;
   return `<span class="code none">Kod yoxdur</span>`;
 }
+/* photo inside a card: our own pictures fill the frame; other shops' pictures sit whole on
+   white, small ones are not blown up, and a picture that fails falls back to the other shop's */
+function photoHtml(p, c, big = false){
+  const emo = esc(c ? c.emoji : '📦');
+  const src = big ? (hdReady.get(p.photoUrl) || p.photo || p.photoUrl) : p.photo;
+  if (!src) return emo;
+  const ext = !ownPhoto(p) && !(big && hdReady.has(p.photoUrl));
+  return `<i class="ph-emo" aria-hidden="true">${emo}</i><img src="${esc(src)}" alt="${big ? esc(p.name) : ''}" ${big ? '' : 'loading="lazy"'} decoding="async"`
+    + (ext ? ` class="ext" data-alt="${esc(p.photoAlt || '')}" onload="kyImgOk(this)" onerror="kyImgBad(this)">` : '>');
+}
+window.kyImgOk = img => { if (img.naturalWidth && Math.max(img.naturalWidth, img.naturalHeight) < 280) img.classList.add('lowres'); };
+window.kyImgBad = img => { const a = img.dataset.alt; if (a && img.getAttribute('src') !== a) { img.dataset.alt = ''; img.src = a; } else img.remove(); };
 function productCard(p, showCat){
   const c = catById(p.catId), m = mainPrice(p);
   return `<button class="card" data-id="${esc(p.id)}" style="--t:${tintOf(c)}">
-    <span class="ph">${p.photo ? `<img src="${esc(p.photo)}" alt="" loading="lazy" decoding="async">` : esc(c ? c.emoji : '📦')}
+    <span class="ph">${photoHtml(p, c)}
       ${m && m.s != null ? `<span class="off">−${offPct(m)}%</span>` : ''}</span>
     <span class="nm">${esc(p.name)}</span>
     ${priceTag(p)}
@@ -1158,7 +1178,7 @@ function openDetail(p, opts = {}){
     sheet.innerHTML = `
       <div class="grab"></div>
       <div class="sheet-bar"><span></span><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div>
-      <div class="det-photo">${cur.photo || cur.photoUrl ? `<img src="${esc(hdReady.get(cur.photoUrl) || cur.photo || cur.photoUrl)}" alt="${esc(cur.name)}">` : esc(c ? c.emoji : '📦')}</div>
+      <div class="det-photo">${photoHtml(cur, c, true)}</div>
       <p class="det-cat">${c ? esc(c.emoji + ' ' + c.name) : 'Kateqoriyasız'}${pathOf(cur).length ? ' › ' + pathOf(cur).map(esc).join(' › ') : ''}</p>
       <h2 class="det-name">${esc(cur.name)}</h2>
       <div class="det-price">${priceTag(cur)}</div>
@@ -1318,13 +1338,13 @@ function openForm(p, prefill){ return pushOverlay(buildForm(p, prefill)); }
 /* ================= scanning ================= */
 function miniRow(p){
   const c = catById(p.catId);
-  return `<button class="pick" data-id="${esc(p.id)}" style="--t:${tintOf(c)}"><span class="ph">${p.photo ? `<img src="${esc(p.photo)}" alt="">` : esc(c ? c.emoji : '📦')}</span>
+  return `<button class="pick" data-id="${esc(p.id)}" style="--t:${tintOf(c)}"><span class="ph">${photoHtml(p, c)}</span>
     <span class="tx"><b>${esc(p.name)}</b><span>${esc(fmtCode(p.code) || 'Kod yoxdur')}${fmtPrice(p.price) ? ', ' + fmtPrice(p.price) + ' ₼' : ''}</span></span></button>`;
 }
 function bestCard(p, badge, soft, pct){
   const c = catById(p.catId), code = fmtCode(p.code);
   return `<button class="best" data-id="${esc(p.id)}" style="--t:${tintOf(c)}">
-    <span class="ph">${p.photo ? `<img src="${esc(p.photo)}" alt="">` : esc(c ? c.emoji : '📦')}</span>
+    <span class="ph">${photoHtml(p, c)}</span>
     <span class="info"><span class="badge ${soft ? 'soft' : ''}">${esc(badge)}</span>
       <span class="nm">${esc(p.name)}</span>${priceTag(p)}
       ${code ? `<span class="code">${esc(code)}</span>` : `<span class="code none">Kod yoxdur</span>`}
