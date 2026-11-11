@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "Kod Yaddaşım",
+  "short_name": "Kod Yaddaşım",
+  "description": "Məhsul kodları, şəkilləri və qiymətləri. Şəkillə skan.",
+  "lang": "az",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF7F5",
+  "theme_color": "#B0173B",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
