@@ -341,6 +341,77 @@ textarea.inp{height:110px;padding:10px 14px;resize:vertical;font-size:13px}
 .det-photo img.ext.lowres{padding:20%}
 
 .dialog p{white-space:pre-line}
+
+/* ---------- market analysis ---------- */
+:root{--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s8:#e34948;
+  --q1:#cde2fb;--q2:#9ec5f4;--q3:#6da7ec;--q4:#3987e5;--q5:#256abf;--q6:#184f95;--grid:#ece8e6;--axis:#cfc8c5}
+[data-theme="gece"]{--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;
+  --q1:#184f95;--q2:#1c5cab;--q3:#256abf;--q4:#2a78d6;--q5:#5598e7;--q6:#9ec5f4;--grid:#3b3135;--axis:#4a3f43}
+.hero-btns{display:flex;gap:8px}
+a.icon-btn{color:inherit;text-decoration:none}
+.icon-btn svg{width:22px;height:22px}
+.ana-head{margin-bottom:4px}
+.ana-filters{margin:14px 0 6px;display:flex;flex-direction:column;gap:8px}
+.ana-filters .frow{margin-bottom:0}
+.sdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px;flex:none}
+.ana-row{display:flex;gap:8px}
+.ana-row select,.ana-row input,.ana-dates input{flex:1;min-width:0;height:44px;padding:0 12px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:15px}
+.ana-dates{display:flex;gap:8px}
+.ana-dates label{flex:1;display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.ana{display:flex;flex-direction:column;gap:14px;padding-bottom:40px;transition:opacity .15s}
+.ana.busy{opacity:.55}
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (min-width:640px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.kpi{padding:12px 14px;border-radius:16px;background:var(--surface);border:1px solid var(--line);display:flex;flex-direction:column;gap:2px}
+.kpi span{font-size:13px;color:var(--muted)}
+.kpi b{font-size:26px;font-weight:650;line-height:1.15}
+.kpi small{font-size:12px;color:var(--muted)}
+.ana-card{padding:14px;border-radius:18px;background:var(--surface);border:1px solid var(--line);min-width:0}
+.ana-card h3,.ana-h3{margin:0;font-size:17px;font-weight:650}
+.ana-h3{margin:18px 0 8px}
+.ana-card .sub,.sheet .sub{margin:4px 0 10px;font-size:13px;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 6px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center}
+.lkey{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;flex:none}
+.chart{position:relative;overflow:hidden;touch-action:pan-y}
+.chart svg{display:block;width:100%;height:auto}
+.chart .grid{stroke:var(--grid);stroke-width:1}
+.chart .tick{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.chart .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.chart .end{stroke:var(--surface);stroke-width:2}
+.chart .xhair{stroke:var(--axis);stroke-width:1}
+.chart .tip{position:absolute;top:4px;min-width:120px;max-width:220px;padding:8px 10px;border-radius:12px;background:var(--surface);border:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.08);font-size:13px;pointer-events:none}
+.chart .tip b{display:block;font-weight:600;margin-bottom:4px;color:var(--muted);font-size:12px}
+.trow{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.trow strong{font-weight:650;font-variant-numeric:tabular-nums}
+.trow span{color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.heat{display:grid;grid-template-columns:minmax(110px,1.6fr) repeat(var(--cols),minmax(18px,1fr));gap:2px;align-items:center;overflow-x:auto}
+.hcol{font-size:11px;color:var(--muted);text-align:center;white-space:nowrap}
+.hname .sdot{width:6px;height:6px;margin-right:4px}
+.hname{all:unset;cursor:pointer;font-size:13px;line-height:1.2;padding:4px 6px 4px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hname:focus-visible{outline:2px solid var(--accent);border-radius:4px}
+.hc{display:block;height:22px;border-radius:4px;background:var(--paper)}
+.hc.on{cursor:pointer}
+.hc.on:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.hlegend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:10px;font-size:12px;color:var(--muted)}
+.hlegend i{display:inline-block;width:16px;height:10px;border-radius:3px}
+.hlegend span{margin-right:4px}
+.tip-line{min-height:18px;margin:8px 0 0;font-size:13px}
+.atable{width:100%;border-collapse:collapse;font-size:14px}
+.atable th{text-align:left;font-weight:500;font-size:12px;color:var(--muted);padding:6px 6px 6px 0;border-bottom:1px solid var(--line)}
+.atable td{padding:9px 6px 9px 0;border-bottom:1px solid var(--line);vertical-align:top;font-variant-numeric:tabular-nums;white-space:nowrap}
+.atable td:first-child{white-space:normal;width:100%}
+.atable tr[data-g]{cursor:pointer}
+.atable .nm{display:block;font-weight:550;line-height:1.25}
+.atable .shops{display:block;margin-top:3px;font-size:12px;color:var(--muted)}
+.atable s{color:var(--muted);font-size:12px;margin-left:4px}
+.atable .up{color:#b42318}
+.atable .down{color:#067647}
+[data-theme="gece"] .atable .up{color:#f97066}
+[data-theme="gece"] .atable .down{color:#47cd89}
+.hist-btn{margin-top:14px}
+.hist-btn svg{width:20px;height:20px}
+.ana-empty p{margin:6px 0}
 </style>
 </head>
 <body>
@@ -408,8 +479,9 @@ const fmtPrice = p => (p == null || p === '' || isNaN(p)) ? null : Number(p).toF
 const UNIT_LABEL = {kq: 'kq', ed: 'ədəd'};
 const money = v => (v == null || v === '' || isNaN(v)) ? null : Math.round(Number(v) * 100) / 100;
 const storeName = id => (STORES.find(s => s.id === id) || {name: id}).name;
-/* every shop's price as {r: regular, s: sale or null}; older products kept one number in p.price */
-function pricesOf(p){
+/* every shop's saved price as {r: regular, s: sale or null}; older products kept one number in p.price.
+   pricesOf (in the market section) adds the robot's latest prices on top */
+function basePrices(p){
   const out = {};
   if (p.prices && typeof p.prices === 'object') {
     for (const [k, v] of Object.entries(p.prices)) {
@@ -450,6 +522,7 @@ const ICON = {
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   scan:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16"/><circle cx="12" cy="12" r="4"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M5 15l4-5 4 3 6-7"/></svg>',
   back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
@@ -1089,11 +1162,11 @@ function searchProducts(q, catId, sel = [], saleOnly = false, shop = null){
 /* ================= views ================= */
 function parseHash(){
   const h = decodeURIComponent(location.hash.slice(1));
-  return h.startsWith('c-') ? {name: 'cat', id: h.slice(2)} : {name: 'home'};
+  return h.startsWith('c-') ? {name: 'cat', id: h.slice(2)} : h === 'analiz' ? {name: 'analiz'} : {name: 'home'};
 }
 function route(){
   const prev = S.route, next = parseHash();
-  if (prev.name === 'home' && next.name === 'cat') { S.homeScroll = window.scrollY; S.cameFromHome = true; }
+  if (prev.name === 'home' && next.name !== 'home') { S.homeScroll = window.scrollY; S.cameFromHome = true; }
   if (next.name === 'home') S.cameFromHome = false;
   const changed = prev.name !== next.name || prev.id !== next.id;
   S.route = next; if (changed) { S.q = ''; S.sel = []; S.saleOnly = false; S.shop = null; S.limit = PAGE; }
@@ -1173,6 +1246,10 @@ function renderShell(){
       <section id="content"></section>`;
     $('#back').onclick = () => { if (S.cameFromHome) history.back(); else location.hash = ''; };
     if ($('#btn-add')) $('#btn-add').onclick = () => openForm(null, {catId: S.route.id});
+  } else if (S.route.name === 'analiz') {
+    app.innerHTML = analizShell();
+    $('#back').onclick = () => { if (S.cameFromHome) history.back(); else location.hash = ''; };
+    anaKey = ''; renderContent(); return;
   } else {
     const owner = can.admin() ? (S.settings.owner || '').trim()
       : ((S.user && S.user.displayName) ? S.user.displayName.split(' ')[0] : myEmail().split('@')[0]);
@@ -1180,7 +1257,8 @@ function renderShell(){
       <header>
         <div class="hero-top">
           <p class="hello">${owner ? `Salam, <b>${esc(owner)}</b>` : 'Salam'}</p>
-          <button class="icon-btn" id="btn-settings" aria-label="Ayarlar">${ICON.gear}</button>
+          <span class="hero-btns"><a class="icon-btn" id="btn-analiz" href="#analiz" aria-label="Analiz">${ICON.chart}</a>
+          <button class="icon-btn" id="btn-settings" aria-label="Ayarlar">${ICON.gear}</button></span>
         </div>
         <h1 class="title">${esc(S.settings.title || APP_NAME)}</h1>
         <p class="meta" id="meta"></p>
@@ -1365,6 +1443,7 @@ function renderContent(){
     status.innerHTML = msg ? `<p class="note">${esc(msg)}</p>` : '';
   }
   if (!ready()) { box.innerHTML = '<div class="loading">Yüklənir…</div>'; return; }
+  if (S.route.name === 'analiz') { renderAnaliz(); return; }
   if (S.route.name === 'cat') {
     const all = S.products.filter(p => p.catId === S.route.id);
     meta.textContent = all.length + ' məhsul';
@@ -1459,6 +1538,7 @@ function openDetail(p, opts = {}){
         <span class="num ${!code && storeCode ? 'sku' : ''}">${code ? esc(code) : storeCode ? esc(storeCode) : '—'}</span></div>
         ${copyVal ? `<button class="sq-btn" id="d-copy" aria-label="Kodu kopyala">${ICON.copy}</button>` : ''}</div>
       ${priceTable(cur)}
+      <button class="btn ghost wide hist-btn" id="d-hist">${ICON.chart}Qiymət tarixçəsi</button>
       ${cur.createdBy ? `<p class="det-by">Əlavə edən: ${esc(cur.createdBy)}${cur.updatedBy && cur.updatedBy !== cur.createdBy ? `, son düzəliş: ${esc(cur.updatedBy)}` : ''}</p>` : ''}
       ${can.edit() ? `<div class="det-actions">
         <button class="btn ghost" id="d-edit">${ICON.edit}Düzəlt</button>
@@ -1478,6 +1558,7 @@ function openDetail(p, opts = {}){
     if (oldPhoto) $('.det-photo', sheet).replaceWith(oldPhoto);
     const cp = $('#d-copy', sheet);
     if (cp) cp.onclick = async () => toast(await copyText(copyVal) ? 'Kod kopyalandı' : 'Kopyalamaq olmadı');
+    $('#d-hist', sheet).onclick = () => openHistory(cur, cur.id);
     const pe = $('#d-prices-edit', sheet);
     if (pe) pe.onclick = () => swapTop(buildForm(cur, {focusPrices: true}));
     if ($('#d-edit', sheet)) $('#d-edit', sheet).onclick = () => swapTop(buildForm(cur));
@@ -1574,7 +1655,7 @@ function buildForm(p, prefill = {}){
     const name = $('#f-name', sheet).value.trim(), code = $('#f-code', sheet).value.trim();
     $('#w-name', sheet).hidden = !!name;
     if (!name) { $('#f-name', sheet).focus(); return; }
-    const prices = {}; let problem = null, where = null;
+    const prices = {}, seen = []; let problem = null, where = null;
     for (const id of storeIds) {
       const {r, s} = readStore(id), nm = storeName(id);
       if (r.bad || s.bad) { problem = `${nm}: qiyməti rəqəmlə yazın, məs. 4.80`; where = r.bad ? 'r' : 's'; }
@@ -1586,7 +1667,7 @@ function buildForm(p, prefill = {}){
       const sv = s.empty ? null : s.v;
       const same = before.r === r.v && (before.s ?? null) === sv;
       const row = {...old, r: r.v, s: sv, at: same && old.at ? old.at : Date.now()};
-      if (!same) { delete row.from; delete row.to; }   // typed by hand: no longer the leaflet's dates
+      if (!same) { delete row.from; delete row.to; seen.push([id, r.v, sv, row.at]); }   // typed by hand: no longer the leaflet's dates
       prices[id] = row;
     }
     const warn = $('#w-price', sheet); warn.hidden = !problem; warn.textContent = problem || '';
@@ -1600,6 +1681,7 @@ function buildForm(p, prefill = {}){
       unit, code, photo, createdAt: (p && p.createdAt) || Date.now(), updatedAt: Date.now(),
       createdBy: (p && p.createdBy) || myEmail(), updatedBy: myEmail()};
     delete item.id;
+    if (seen.length) item.ph = [...(p && Array.isArray(p.ph) ? p.ph : []), ...seen].slice(-300);
     const chosen = $('#f-path', sheet).value, chosenPath = chosen ? chosen.split(' › ') : [];
     if (chosenPath.join('›') !== pathOf(p || {}).join('›') || (p && p.catId !== item.catId)) { item.path = chosenPath; item.pathManual = true; }
     const samePhoto = p && p.photo === photo;
@@ -2027,9 +2109,485 @@ async function signIn(){
   }
 }
 
+/* ================= market prices: daily robot, history, analysis =================
+   A robot in the repository's GitHub Actions visits the shops' websites every morning and
+   writes two kinds of file next to this page:
+     data/prices/latest.json   today's prices
+       {v, at, stores: {id: {name, ok, n, at, err}}, items: {store: {itemId: [name, r, s, unit, img, code]}}}
+     data/hist/YYYY-MM.json    every change in that month
+       {v, month, last: day, names: {'store:id': name}, ev: [[day, store, id, r, s], ...]}
+       the first entry of an item in a month is its state that day; after that only changes;
+       r = null means the item left the shop's list.
+   The app lays today's prices over the saved ones, and the Analiz page reads the history. */
+const DATA_BASE = window.__kyData || 'data/';
+const LIVE = {data: null, v: 0, idx: null, tried: 0};
+const itemSlug = s => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+function indexLive(j){
+  const idx = {};
+  for (const [st, items] of Object.entries(j.items || {})) {
+    const byId = new Map(), byCode = new Map(), bySlug = new Map();
+    for (const [id, it] of Object.entries(items || {})) {
+      const rec = {id, st, name: String(it[0] || ''), r: money(it[1]), s: money(it[2]), unit: it[3] || '', img: it[4] || '', code: it[5] ? String(it[5]) : ''};
+      if (rec.s != null && rec.r != null && rec.s >= rec.r) rec.s = null;
+      byId.set(id, rec); if (rec.code) byCode.set(rec.code, rec);
+      const sl = itemSlug(rec.name); if (sl && !bySlug.has(sl)) bySlug.set(sl, rec);
+    }
+    const meta = (j.stores && j.stores[st]) || {};
+    idx[st] = {byId, byCode, bySlug, at: Date.parse(meta.at || j.at) || 0, ok: meta.ok !== false};
+  }
+  return idx;
+}
+async function loadLive(force){
+  if (!force && LIVE.tried && Date.now() - LIVE.tried < 20 * 60e3) return;
+  LIVE.tried = Date.now();
+  try {
+    const r = await fetch(DATA_BASE + 'prices/latest.json?h=' + Math.floor(Date.now() / 6e5), {cache: 'no-cache'});
+    if (!r.ok) return;
+    const j = await r.json(); if (!j || !j.items || (LIVE.data && LIVE.data.at === j.at)) return;
+    for (const [id, st] of Object.entries(j.stores || {})) if (!STORES.some(s => s.id === id)) STORES.push({id, name: st.name || id});
+    LIVE.data = j; LIVE.idx = indexLive(j); LIVE.v++; anaKey = '';
+    dataChanged();
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadLive(); });
+/* the shop's own listing of this product, if the robot saw it */
+function liveItem(p, st){
+  const L = LIVE.idx && LIVE.idx[st]; if (!L) return null;
+  const ln = p.links && p.links[st];
+  if (ln != null && ln !== '') return L.byId.get(String(ln)) || null;
+  if (st === 'araz') {
+    const id = p.srcId != null && (!p.src || p.src === 'araz') ? String(p.srcId) : p.id.startsWith('araz-') ? p.id.slice(5) : null;
+    if (id) return L.byId.get(id) || null;
+  }
+  if (st === 'bazar' && p.id.startsWith('bz-')) return L.byId.get(p.id.slice(3)) || null;
+  const cs = p.codes || {};
+  if (cs[st] && L.byCode.get(String(cs[st]))) return L.byCode.get(String(cs[st]));
+  if (p.id.startsWith(st + '-')) { const k = p.id.slice(st.length + 1), r = L.byId.get(k) || L.bySlug.get(k); if (r) return r; }
+  if (p.prices && p.prices[st]) { const r = L.bySlug.get(itemSlug(p.name)); if (r) return r; }
+  const bc = p.sku || cs.araz; if (bc && L.byCode.get(String(bc))) return L.byCode.get(String(bc));
+  return null;
+}
+/* today's robot prices over the saved ones; a price a person wrote after the robot's visit stays */
+const priceCache = new WeakMap();
+function pricesOf(p){
+  const c = priceCache.get(p); if (c && c.v === LIVE.v) return c.out;
+  const out = basePrices(p);
+  if (LIVE.idx) for (const st of Object.keys(LIVE.idx)) {
+    const it = liveItem(p, st); if (!it || it.r == null) continue;
+    const L = LIVE.idx[st], cur = out[st];
+    if (cur && cur.at && cur.at > L.at) continue;
+    out[st] = {r: it.r, s: it.s, at: L.at, live: true};
+  }
+  priceCache.set(p, {v: LIVE.v, out});
+  return out;
+}
+
+/* ---------- history ---------- */
+const HIST = new Map();   // 'YYYY-MM' -> month file, or null when there is none
+const dayNo = (y, m, d) => Math.floor(Date.UTC(y, m - 1, d) / 864e5);
+const todayNo = () => { const d = new Date(); return dayNo(d.getFullYear(), d.getMonth() + 1, d.getDate()); };
+const tsDay = t => { const d = new Date(t); return dayNo(d.getFullYear(), d.getMonth() + 1, d.getDate()); };
+const dDate = n => new Date(n * 864e5);
+const monthOf = n => { const d = dDate(n); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0'); };
+const fmtDayNo = (n, year) => { const d = dDate(n); return d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()] + (year ? ' ' + d.getUTCFullYear() : ''); };
+const isoDay = n => dDate(n).toISOString().slice(0, 10);
+const dayIso = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? dayNo(+m[1], +m[2], +m[3]) : null; };
+function monthsBetween(a, b){
+  const out = []; let d = dDate(a), y = d.getUTCFullYear(), m = d.getUTCMonth() + 1;
+  const e = dDate(b), ey = e.getUTCFullYear(), em = e.getUTCMonth() + 1;
+  while (y < ey || (y === ey && m <= em)) { out.push(y + '-' + String(m).padStart(2, '0')); if (++m > 12) { m = 1; y++; } }
+  return out;
+}
+async function loadHist(months){
+  const cur = monthOf(todayNo());
+  await Promise.all(months.filter(m => !HIST.has(m) || m === cur).map(async m => {
+    try {
+      const r = await fetch(DATA_BASE + 'hist/' + m + '.json' + (m === cur ? '?h=' + Math.floor(Date.now() / 6e5) : ''), {cache: m === cur ? 'no-cache' : 'default'});
+      const j = r.ok ? await r.json() : null;
+      if (HIST.get(m) && j && HIST.get(m).ev && HIST.get(m).ev.length === j.ev.length && HIST.get(m).last === j.last) return;
+      HIST.set(m, j && j.ev ? j : null); anaKey = '';
+    } catch (e) { if (!HIST.has(m)) HIST.set(m, null); }
+  }));
+}
+/* first day the robot recorded anything, from the index file */
+let histStart = null;
+async function loadHistIndex(){
+  try { const r = await fetch(DATA_BASE + 'hist/index.json?h=' + Math.floor(Date.now() / 36e5), {cache: 'no-cache'}); if (r.ok) { const j = await r.json(); histStart = dayIso(j.first); return j; } } catch (e) {}
+  return null;
+}
+/* every item's prices over the period: key 'store:id' -> {st, id, name, pts: [[day, r, s]]} */
+function timelines(months, stores){
+  const out = new Map(); let last = null;
+  for (const m of months) {
+    const H = HIST.get(m); if (!H) continue;
+    const [y, mo] = m.split('-').map(Number);
+    if (H.last) last = Math.max(last || 0, dayNo(y, mo, H.last));
+    for (const [d, st, id, r, s] of H.ev) {
+      if (stores && !stores.has(st)) continue;
+      const key = st + ':' + id;
+      let t = out.get(key);
+      if (!t) { t = {key, st, id: String(id), name: (H.names && H.names[key]) || '', pts: []}; out.set(key, t); }
+      else if (!t.name && H.names && H.names[key]) t.name = H.names[key];
+      t.pts.push([dayNo(y, mo, d), money(r), money(s)]);
+    }
+  }
+  /* prices people wrote in the app count as observations too */
+  for (const p of S.products) {
+    if (!Array.isArray(p.ph)) continue;
+    for (const e of p.ph) {
+      const [st, r, s, at] = e; if (stores && !stores.has(st)) continue;
+      const day = tsDay(at), key = st + ':@' + p.id;
+      if (!months.includes(monthOf(day))) continue;
+      let t = out.get(key); if (!t) { t = {key, st, id: '@' + p.id, name: p.name, pid: p.id, manual: true, pts: []}; out.set(key, t); }
+      t.pts.push([day, money(r), money(s)]);
+    }
+  }
+  for (const t of out.values()) t.pts.sort((a, b) => a[0] - b[0]);
+  return {items: out, last};
+}
+/* runs of days on sale and changes of the regular price, inside [a, b] */
+function itemStory(t, a, b){
+  const promos = [], moves = [];
+  let cur = null, prevR = null;
+  const pts = t.pts;
+  for (let i = 0; i < pts.length; i++) {
+    const [d, r, s] = pts[i], next = i + 1 < pts.length ? pts[i + 1][0] - 1 : b;
+    if (r != null && prevR != null && r !== prevR && d >= a && d <= b) moves.push({day: d, from: prevR, to: r});
+    if (r != null) prevR = r;
+    const from = Math.max(d, a), to = Math.min(next, b);
+    const sale = r != null && s != null && s < r;
+    if (sale && to >= from) {
+      const pct = Math.round((1 - s / r) * 100);
+      if (cur && cur.to >= from - 1) { cur.to = to; cur.pct = Math.max(cur.pct, pct); cur.s = Math.min(cur.s, s); }
+      else { cur = {from, to, pct, r, s}; promos.push(cur); }
+    } else if (!sale && to >= from) cur = null;
+  }
+  return {promos, moves};
+}
+
+/* ---------- which product an item belongs to ---------- */
+let itemMapV = -1, itemMapN = -1, itemMap = new Map(), nameMap = new Map();
+function productOfItem(key){
+  if (itemMapV !== LIVE.v || itemMapN !== S.products.length) {
+    itemMap = new Map(); nameMap = new Map(); itemMapV = LIVE.v; itemMapN = S.products.length;
+    for (const p of S.products) {
+      const nk = itemNameKey(p.name); nameMap.set(nk, nameMap.has(nk) ? null : p);   // only a name no other product has
+      itemMap.set('araz:' + (p.srcId != null && (!p.src || p.src === 'araz') ? p.srcId : ''), p);
+      if (p.id.startsWith('bz-')) itemMap.set('bazar:' + p.id.slice(3), p);
+      for (const st of STORES.map(s => s.id)) if (p.id.startsWith(st + '-')) itemMap.set(st + ':' + p.id.slice(st.length + 1), p);
+      if (p.links) for (const [st, id] of Object.entries(p.links)) if (id) itemMap.set(st + ':' + id, p);
+      if (LIVE.idx) for (const st of Object.keys(LIVE.idx)) { const it = liveItem(p, st); if (it && !itemMap.has(st + ':' + it.id)) itemMap.set(st + ':' + it.id, p); }
+    }
+    itemMap.delete('araz:');
+  }
+  if (key.includes(':@')) return S.products.find(p => p.id === key.split(':@')[1]) || null;
+  return itemMap.get(key) || null;
+}
+/* an item no product is linked to, but whose name is exactly a product's name */
+const productByName = name => { productOfItem(''); return nameMap.get(itemNameKey(name)) || null; };
+
+/* a shop's barcode that is a real EAN (Wolt shops give them): the same product in every shop that has it */
+const eanOf = t => { const L = LIVE.idx && LIVE.idx[t.st], it = L && L.byId.get(t.id), c = it && it.code; return c && /^\d{8}$|^\d{12,14}$/.test(c) && !/^10000/.test(c) ? c : null; };
+/* the same name in two shops, written a little differently: "Kit Kat 41 q" = "KIT KAT 41QR" */
+const itemNameKey = s => norm(s).replace(/(\d)\s+(?=(qr|gr|q|g|kq|kg|ml|l)\b)/g, '$1').replace(/(\d)(qr|gr|g)\b/g, '$1q').replace(/(\d)kg\b/g, '$1kq').replace(/[^a-z0-9]+/g, ' ').trim();
+/* ---------- colours: one per shop, fixed order, never by rank ---------- */
+const storeSlot = id => { const i = STORES.findIndex(s => s.id === id); return i < 0 ? 8 : Math.min(i + 1, 8); };
+const storeVar = id => `var(--s${storeSlot(id)})`;
+const shopDot = id => `<i class="sdot" style="background:${storeVar(id)}" aria-hidden="true"></i>`;
+
+/* ---------- small SVG charts ---------- */
+const niceMax = v => { if (!(v > 0)) return 1; const e = Math.pow(10, Math.floor(Math.log10(v))), f = v / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; };
+/* one line per shop over time; a crosshair finds the date, the readout lists every shop */
+function lineChart(id, x, series, opt = {}){
+  const all = series.flatMap(s => s.vals.filter(v => v != null));
+  const top = opt.max != null ? opt.max : niceMax(Math.max(...all, 0));
+  const fmt0 = opt.fmt || (v => String(Math.round(v)));
+  const W = Math.max(280, opt.width || 600), H = opt.height || 200, R = 10, T = 10, B = 24;
+  const L = 12 + 7 * Math.max(...[0, top / 2, top].map(v => fmt0(v).length));
+  const px = i => L + (x.length < 2 ? (W - L - R) / 2 : i * (W - L - R) / (x.length - 1)), py = v => T + (H - T - B) * (1 - v / top);
+  const ticks = [0, top / 2, top];
+  const fmt = fmt0;
+  const step = Math.max(1, Math.ceil(x.length / Math.max(2, Math.floor((W - L - R) / 70))));
+  let g = ticks.map(v => `<line class="grid" x1="${L}" x2="${W - R}" y1="${py(v)}" y2="${py(v)}"/><text class="tick" x="${L - 6}" y="${py(v) + 4}" text-anchor="end">${esc(fmt(v))}</text>`).join('');
+  g += x.map((lb, i) => { if (i % step) return '';
+    const xx = px(i), anchor = xx - L < 24 ? 'start' : W - R - xx < 24 ? 'end' : 'middle';
+    return `<text class="tick" x="${xx}" y="${H - 6}" text-anchor="${anchor}">${esc(lb.short)}</text>`; }).join('');
+  const lines = series.map(s => {
+    let d = '', pen = false;
+    s.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + px(i).toFixed(1) + ' ' + py(v).toFixed(1); pen = true; });
+    const lastI = s.vals.reduce((k, v, i) => v != null ? i : k, -1);
+    const end = lastI >= 0 ? `<circle class="end" cx="${px(lastI)}" cy="${py(s.vals[lastI])}" r="4" style="fill:${storeVar(s.id)}"/>` : '';
+    return `<path class="ln" d="${d}" style="stroke:${storeVar(s.id)}"/>${end}`;
+  }).join('');
+  const legend = series.length > 1 ? `<div class="legend">${series.map(s => `<span><i class="lkey" style="background:${storeVar(s.id)}"></i>${esc(s.name)}</span>`).join('')}</div>` : '';
+  CHARTS.set(id, {x, series, px, W, H, T, B, fmt: opt.tip || fmt});
+  return `${legend}<div class="chart" data-chart="${id}"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(opt.label || '')}">${g}${lines}<line class="xhair" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/></svg><div class="tip" hidden></div></div>`;
+}
+const CHARTS = new Map();
+function bindCharts(root){
+  $$('.chart[data-chart]', root).forEach(box => {
+    const c = CHARTS.get(box.dataset.chart); if (!c) return;
+    const svg = $('svg', box), tip = $('.tip', box), hair = $('.xhair', svg);
+    const show = ev => {
+      const r = svg.getBoundingClientRect(), xx = (ev.clientX - r.left) * c.W / r.width;
+      let best = 0, bd = 1e9; c.x.forEach((_, i) => { const d = Math.abs(c.px(i) - xx); if (d < bd) { bd = d; best = i; } });
+      hair.setAttribute('x1', c.px(best)); hair.setAttribute('x2', c.px(best)); hair.setAttribute('visibility', 'visible');
+      tip.replaceChildren();
+      const h = document.createElement('b'); h.textContent = c.x[best].long; tip.appendChild(h);
+      for (const s of c.series) {
+        const v = s.vals[best]; const row = document.createElement('div'); row.className = 'trow';
+        const k = document.createElement('i'); k.className = 'lkey'; k.style.background = storeVar(s.id);
+        const val = document.createElement('strong'); val.textContent = v == null ? '—' : c.fmt(v);
+        const nm = document.createElement('span'); nm.textContent = s.name;
+        row.append(k, val, nm); tip.appendChild(row);
+      }
+      tip.hidden = false;
+      const left = c.px(best) / c.W * r.width;
+      tip.style.left = Math.min(Math.max(0, left - tip.offsetWidth / 2), r.width - tip.offsetWidth) + 'px';
+    };
+    box.onpointermove = show; box.onpointerdown = show;
+    box.onpointerleave = () => { tip.hidden = true; hair.setAttribute('visibility', 'hidden'); };
+  });
+}
+/* sequential blue: deeper discount, darker cell */
+const HEAT = [[10, 'var(--q1)'], [20, 'var(--q2)'], [30, 'var(--q3)'], [40, 'var(--q4)'], [50, 'var(--q5)'], [101, 'var(--q6)']];
+const heatOf = pct => (HEAT.find(([lim]) => pct < lim) || HEAT[HEAT.length - 1])[1];
+
+/* ---------- the Analiz page ---------- */
+const ANA = {period: '3m', from: null, to: null, stores: null, path: '', q: '', open: null};
+let anaKey = '', anaBusy = false, anaAgain = false;
+function anaRange(){
+  const t = todayNo(), d = dDate(t), y = d.getUTCFullYear(), m = d.getUTCMonth() + 1;
+  const first = histStart || t;
+  switch (ANA.period) {
+    case 'week': return [t - 6, t];
+    case 'month': return [dayNo(y, m, 1), t];
+    case 'prev': { const pm = m === 1 ? 12 : m - 1, py = m === 1 ? y - 1 : y; return [dayNo(py, pm, 1), dayNo(y, m, 1) - 1]; }
+    case '3m': return [t - 89, t];
+    case 'year': return [dayNo(y, 1, 1), t];
+    case 'all': return [Math.min(first, t), t];
+    default: { const a = dayIso(ANA.from) ?? t - 29, b = dayIso(ANA.to) ?? t; return a <= b ? [a, b] : [b, a]; }
+  }
+}
+const PERIODS = [['week', 'Son 7 gün'], ['month', 'Bu ay'], ['prev', 'Keçən ay'], ['3m', 'Son 3 ay'], ['year', 'Bu il'], ['all', 'Hamısı'], ['custom', 'Tarix seç']];
+function analizShell(){
+  return `
+    <header class="cat-head ana-head">
+      <button class="icon-btn" id="back" aria-label="Geri">${ICON.back}</button>
+      <h1>Analiz</h1>
+    </header>
+    <p class="meta" id="meta"></p>
+    <div id="ana-filters" class="ana-filters"></div>
+    <section id="content" class="ana"></section>`;
+}
+function renderAnalizFilters(){
+  const f = $('#ana-filters'); if (!f) return;
+  const cat = S.cats.find(c => c.id === 'sirniyyat') || S.cats[0];
+  const paths = new Map();
+  for (const p of S.products) { const ph = pathOf(p); if (!ph.length) continue; paths.set(ph[0], true); if (ph[1]) paths.set(ph[0] + ' › ' + ph[1], true); }
+  const opts = [...paths.keys()].sort((a, b) => collator.compare(a, b));
+  const shops = STORES.filter(s => LIVE.idx ? LIVE.idx[s.id] : true);
+  f.innerHTML = `
+    <div class="frow" data-key="ana-period">${PERIODS.map(([k, t]) => `<button class="fchip" data-period="${k}" aria-pressed="${ANA.period === k}">${t}</button>`).join('')}</div>
+    ${ANA.period === 'custom' ? `<div class="ana-dates"><label>Başlanğıc<input type="date" id="a-from" value="${esc(ANA.from || isoDay(todayNo() - 29))}"></label>
+      <label>Son<input type="date" id="a-to" value="${esc(ANA.to || isoDay(todayNo()))}"></label></div>` : ''}
+    <div class="frow" data-key="ana-shops"><button class="fchip" data-shop="" aria-pressed="${!ANA.stores}">Bütün mağazalar</button>${shops.map(s =>
+      `<button class="fchip" data-shop="${esc(s.id)}" aria-pressed="${!!(ANA.stores && ANA.stores.has(s.id))}">${shopDot(s.id)}${esc(s.name)}</button>`).join('')}</div>
+    <div class="ana-row">
+      <select id="a-path" aria-label="Alt kateqoriya"><option value="">Bütün qruplar</option>${opts.map(o => `<option value="${esc(o)}" ${ANA.path === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>
+      <input type="search" id="a-q" placeholder="Məhsul adı" value="${esc(ANA.q)}" aria-label="Məhsul adı">
+    </div>`;
+  f.onclick = e => {
+    const b = e.target.closest('.fchip'); if (!b) return;
+    if (b.dataset.period) { ANA.period = b.dataset.period; renderAnalizFilters(); renderAnaliz(true); return; }
+    if (b.hasAttribute('data-shop')) {
+      const id = b.dataset.shop;
+      if (!id) ANA.stores = null;
+      else { const s = new Set(ANA.stores || []); s.has(id) ? s.delete(id) : s.add(id); ANA.stores = s.size ? s : null; }
+      renderAnalizFilters(); renderAnaliz(true);
+    }
+  };
+  const fr = $('#a-from', f), to = $('#a-to', f);
+  if (fr) fr.onchange = () => { ANA.from = fr.value; renderAnaliz(true); };
+  if (to) to.onchange = () => { ANA.to = to.value; renderAnaliz(true); };
+  $('#a-path', f).onchange = e => { ANA.path = e.target.value; renderAnaliz(true); };
+  let qt; $('#a-q', f).oninput = e => { clearTimeout(qt); qt = setTimeout(() => { ANA.q = e.target.value.trim(); renderAnaliz(true); }, 250); };
+}
+function robotLine(){
+  const d = LIVE.data; if (!d) return 'Robotun məlumatı hələ yoxdur.';
+  const when = new Date(d.at);
+  const st = Object.entries(d.stores || {}).map(([id, s]) => `${storeName(id)} ${s.ok === false ? '✗' : '✓'}`).join(' · ');
+  const via = Object.entries(d.stores || {}).filter(([, s]) => s.via).map(([id]) => storeName(id));
+  return `Son yoxlama: ${fmtDay(when)} ${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')} · ${st}`
+    + (via.length ? `. ${via.join(', ')} qiymətləri Wolt-dan götürülür.` : '');
+}
+async function renderAnaliz(force){
+  if (S.route.name !== 'analiz' || !$('#content')) return;
+  const meta = $('#meta'); if (meta) meta.textContent = robotLine();
+  if (!$('#ana-filters').childElementCount) renderAnalizFilters();
+  const [a, b] = anaRange(), months = monthsBetween(a, b);
+  const key = [a, b, ANA.stores ? [...ANA.stores].join(',') : '', ANA.path, ANA.q, LIVE.v, S.products.length].join('|');
+  if (!force && key === anaKey && $('#content').childElementCount) return;
+  if (anaBusy) { anaAgain = true; return; }
+  anaBusy = true;
+  try {
+    let box = $('#content'); box.classList.add('busy');
+    if (!box.childElementCount) box.innerHTML = '<div class="loading">Yüklənir…</div>';
+    await Promise.all([loadHist(months), histStart == null ? loadHistIndex() : null]);
+    box = $('#content');   // the page may have been drawn again while the files loaded
+    if (!box || S.route.name !== 'analiz') return;
+    anaKey = key;
+    box.innerHTML = analizBody(a, b, months);
+    bindCharts(box); bindAnaliz(box);
+  } finally {
+    anaBusy = false; const bx = $('#content'); if (bx) bx.classList.remove('busy');
+    if (anaAgain) { anaAgain = false; setTimeout(() => renderAnaliz(), 0); }
+  }
+}
+/* the period split into days, weeks or months so a chart has 7-60 points */
+function buckets(a, b){
+  const n = b - a + 1, out = [];
+  if (n <= 62) { for (let d = a; d <= b; d++) out.push({a: d, b: d, short: fmtDayNo(d), long: fmtDayNo(d, true)}); return out; }
+  if (n <= 400) {
+    for (let d = a; d <= b; d += 7) { const e = Math.min(b, d + 6); out.push({a: d, b: e, short: fmtDayNo(d), long: fmtDayNo(d) + ' – ' + fmtDayNo(e, true)}); }
+    return out;
+  }
+  for (const m of monthsBetween(a, b)) { const [y, mo] = m.split('-').map(Number); const s = Math.max(a, dayNo(y, mo, 1)), e = Math.min(b, dayNo(mo === 12 ? y + 1 : y, mo === 12 ? 1 : mo + 1, 1) - 1);
+    out.push({a: s, b: e, short: MONTHS[mo - 1], long: MONTHS[mo - 1] + ' ' + y}); }
+  return out;
+}
+function analizBody(a, b, months){
+  const stores = ANA.stores, q = norm(ANA.q);
+  const {items, last} = timelines(months, stores);
+  if (!items.size) return `<div class="empty-state ana-empty"><p><b>Tarixçə hələ toplanır.</b></p>
+    <p>Robot hər səhər marketlərin saytlarına baxıb qiymətləri yazır. İlk günlərdən sonra burada endirimlər, qiymət dəyişiklikləri və qrafiklər görünəcək.</p></div>`;
+  const end = Math.min(b, last != null ? last : b);
+  /* items grouped by product */
+  const groups = new Map();
+  for (const t of items.values()) {
+    const p = t.pid ? S.products.find(x => x.id === t.pid) : productOfItem(t.key) || productByName(t.name);
+    if (ANA.path) { const ph = p ? pathOf(p).join(' › ') : ''; if (!ph.startsWith(ANA.path)) continue; }
+    const name = p ? p.name : t.name;
+    if (q && !norm(name).includes(q)) continue;
+    const ean = !p && eanOf(t);
+    const gk = p ? p.id : ean ? 'e:' + ean : 'n:' + itemNameKey(name);
+    let g = groups.get(gk); if (!g) { g = {key: gk, p, name, items: [], promos: [], moves: []}; groups.set(gk, g); }
+    const st = itemStory(t, a, end);
+    g.items.push(t);
+    for (const x of st.promos) g.promos.push({...x, st: t.st});
+    for (const x of st.moves) g.moves.push({...x, st: t.st});
+  }
+  const gl = [...groups.values()];
+  if (!gl.length) return `<div class="empty-state ana-empty"><p>Bu seçimə uyğun məhsul tapılmadı.</p></div>`;
+  const shopIds = [...new Set(gl.flatMap(g => g.items.map(t => t.st)))].sort((x, y) => storeSlot(x) - storeSlot(y));
+  /* headline figures */
+  const onPromo = gl.filter(g => g.promos.length);
+  const pcts = onPromo.flatMap(g => g.promos.map(x => x.pct));
+  const avgPct = pcts.length ? Math.round(pcts.reduce((s, v) => s + v, 0) / pcts.length) : 0;
+  const ups = gl.flatMap(g => g.moves).filter(m => m.to > m.from).length, downs = gl.flatMap(g => g.moves).filter(m => m.to < m.from).length;
+  /* charts over time */
+  const bk = buckets(a, end);
+  const perShop = shopIds.map(st => {
+    const cnt = bk.map(() => new Set()), sum = bk.map(() => 0), num = bk.map(() => 0);
+    for (const g of gl) for (const x of g.promos) {
+      if (x.st !== st) continue;
+      bk.forEach((u, i) => { if (x.from <= u.b && x.to >= u.a) { if (!cnt[i].has(g.key)) { cnt[i].add(g.key); sum[i] += x.pct; num[i]++; } } });
+    }
+    return {id: st, name: storeName(st), n: cnt.map(c => c.size), pct: sum.map((s, i) => num[i] ? Math.round(s / num[i]) : null)};
+  });
+  const width = Math.min(760, (($('#content') || {}).clientWidth || 600));
+  const chart1 = lineChart('a-count', bk, perShop.map(s => ({id: s.id, name: s.name, vals: s.n})), {width, label: 'Endirimdəki məhsul sayı', tip: v => v + ' məhsul'});
+  const chart2 = lineChart('a-pct', bk, perShop.map(s => ({id: s.id, name: s.name, vals: s.pct})), {width, label: 'Orta endirim faizi', fmt: v => Math.round(v) + '%'});
+  /* the products that went on sale most */
+  const rank = onPromo.map(g => {
+    const days = g.promos.reduce((s, x) => s + x.to - x.from + 1, 0), maxPct = Math.max(...g.promos.map(x => x.pct));
+    const lastDay = Math.max(...g.promos.map(x => x.to));
+    return {g, n: g.promos.length, days, maxPct, lastDay, shops: [...new Set(g.promos.map(x => x.st))].sort((x, y) => storeSlot(x) - storeSlot(y))};
+  }).sort((x, y) => y.n - x.n || y.days - x.days || y.maxPct - x.maxPct);
+  /* calendar: months (or weeks) across, products down */
+  const cols = (end - a + 1) > 62 ? monthsBetween(a, end).map(m => { const [y, mo] = m.split('-').map(Number); return {a: Math.max(a, dayNo(y, mo, 1)), b: Math.min(end, dayNo(mo === 12 ? y + 1 : y, mo === 12 ? 1 : mo + 1, 1) - 1), short: MONTHS[mo - 1], long: MONTHS[mo - 1] + ' ' + y}; })
+    : bk.length > 14 ? buckets(a, end).filter((_, i) => i % 7 === 0).map(u => ({a: u.a, b: Math.min(end, u.a + 6), short: fmtDayNo(u.a), long: fmtDayNo(u.a) + ' – ' + fmtDayNo(Math.min(end, u.a + 6), true)})) : bk;
+  const calRows = rank.slice(0, 40).map(r => {
+    const cells = cols.map(c => {
+      const hits = r.g.promos.filter(x => x.from <= c.b && x.to >= c.a);
+      if (!hits.length) return `<span class="hc" title=""></span>`;
+      const mx = Math.max(...hits.map(x => x.pct));
+      const tip = c.long + ': ' + [...new Set(hits.map(x => x.st))].map(st => storeName(st) + ' ' + Math.max(...hits.filter(x => x.st === st).map(x => x.pct)) + '%').join(', ');
+      return `<span class="hc on" style="background:${heatOf(mx)}" title="${esc(tip)}" tabindex="0" aria-label="${esc(tip)}"></span>`;
+    }).join('');
+    return `<button class="hname" data-g="${esc(r.g.key)}">${r.shops.map(shopDot).join('')}${esc(r.g.name)}</button>${cells}`;
+  }).join('');
+  const moves = gl.flatMap(g => g.moves.map(m => ({...m, g}))).sort((x, y) => y.day - x.day).slice(0, 60);
+  return `
+    <div class="kpis">
+      <div class="kpi"><span>İzlənən məhsul</span><b>${gl.length.toLocaleString('az')}</b></div>
+      <div class="kpi"><span>Endirimə düşən</span><b>${onPromo.length.toLocaleString('az')}</b></div>
+      <div class="kpi"><span>Orta endirim</span><b>${avgPct}%</b></div>
+      <div class="kpi"><span>Qiyməti dəyişən</span><b>${(ups + downs).toLocaleString('az')}</b><small>${ups} artım · ${downs} azalma</small></div>
+    </div>
+    <section class="ana-card"><h3>Endirimdəki məhsul sayı</h3><p class="sub">${bk[0].a === bk[0].b ? 'Gün üzrə' : 'Həftə üzrə'}, hər mağaza ayrıca</p>${chart1}</section>
+    <section class="ana-card"><h3>Orta endirim faizi</h3><p class="sub">Endirimdə olan məhsulların orta endirimi</p>${chart2}</section>
+    <section class="ana-card"><h3>Endirim təqvimi</h3><p class="sub">Hər xana həmin dövrdə ən böyük endirimdir. Toxunsanız mağaza və faiz görünür.</p>
+      ${calRows ? `<div class="heat" style="--cols:${cols.length}"><span></span>${cols.map(c => `<span class="hcol">${esc(c.short)}</span>`).join('')}${calRows}</div>
+      <div class="hlegend"><span>Endirim</span>${HEAT.map(([lim], i) => `<i style="background:${HEAT[i][1]}"></i><small>${i === HEAT.length - 1 ? '50%+' : (i * 10) + '–' + lim + '%'}</small>`).join('')}</div>
+      <p class="tip-line" id="heat-tip" aria-live="polite"></p>` : '<p class="sub">Bu dövrdə endirim olmayıb.</p>'}</section>
+    <section class="ana-card"><h3>Ən çox endirimə düşənlər</h3>
+      ${rank.length ? `<table class="atable"><thead><tr><th>Məhsul</th><th>Dəfə</th><th>Gün</th><th>Ən çox</th><th>Son</th></tr></thead><tbody>
+      ${rank.slice(0, 100).map(r => `<tr data-g="${esc(r.g.key)}"><td><span class="nm">${esc(r.g.name)}</span><span class="shops">${r.shops.map(st => shopDot(st) + esc(storeName(st))).join(' ')}</span></td>
+        <td>${r.n}</td><td>${r.days}</td><td>${r.maxPct}%</td><td>${fmtDayNo(r.lastDay)}</td></tr>`).join('')}</tbody></table>` : '<p class="sub">Bu dövrdə endirim olmayıb.</p>'}</section>
+    <section class="ana-card"><h3>Endirimsiz qiymət dəyişiklikləri</h3>
+      ${moves.length ? `<table class="atable"><thead><tr><th>Məhsul</th><th>Köhnə</th><th>Yeni</th><th>Fərq</th><th>Tarix</th></tr></thead><tbody>
+      ${moves.map(m => `<tr data-g="${esc(m.g.key)}"><td><span class="nm">${esc(m.g.name)}</span><span class="shops">${shopDot(m.st)}${esc(storeName(m.st))}</span></td>
+        <td>${fmtPrice(m.from)}</td><td>${fmtPrice(m.to)}</td><td class="${m.to > m.from ? 'up' : 'down'}">${m.to > m.from ? '▲ +' : '▼ '}${Math.round((m.to / m.from - 1) * 100)}%</td><td>${fmtDayNo(m.day)}</td></tr>`).join('')}</tbody></table>` : '<p class="sub">Bu dövrdə endirimsiz qiymət dəyişməyib.</p>'}</section>`;
+}
+function bindAnaliz(box){
+  box.onclick = e => {
+    const row = e.target.closest('[data-g]'); if (!row) return;
+    const key = row.dataset.g, p = S.products.find(x => x.id === key);
+    openHistory(p, key);
+  };
+  const tipLine = $('#heat-tip', box);
+  $$('.hc.on', box).forEach(c => { const f = () => { if (tipLine) tipLine.textContent = c.getAttribute('aria-label'); }; c.onfocus = f; c.onpointerenter = f; c.onclick = f; });
+}
+/* one product's prices in every shop over time, and its sale runs */
+async function openHistory(p, key){
+  const node = el(`<div class="overlay"><div class="scrim"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Qiymət tarixçəsi"></div></div>`);
+  const sheet = node.querySelector('.sheet');
+  sheet.innerHTML = `<div class="grab"></div><div class="sheet-bar"><span></span><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div><div class="loading">Yüklənir…</div>`;
+  pushOverlay(node);
+  const t = todayNo(), a = Math.max(histStart || t - 179, t - 364), months = monthsBetween(a, t);
+  await loadHist(months);
+  const {items, last} = timelines(months, null);
+  const end = Math.min(t, last != null ? last : t);
+  const mine = [...items.values()].filter(it => {
+    const q = it.pid ? S.products.find(x => x.id === it.pid) : productOfItem(it.key) || productByName(it.name);
+    return p ? q === p : !q && (key.startsWith('e:') ? 'e:' + eanOf(it) === key : key.startsWith('n:') ? !eanOf(it) && 'n:' + itemNameKey(it.name) === key : it.key === key);
+  });
+  const name = p ? p.name : (mine[0] && mine[0].name) || '';
+  const bk = buckets(a, end);
+  const series = mine.map(it => {
+    const vals = bk.map(u => { let v = null; for (const [d, r, s] of it.pts) { if (d > u.b) break; v = r == null ? null : (s != null && s < r ? s : r); } return v; });
+    return {id: it.st, name: storeName(it.st) + (it.manual ? ' (əl ilə)' : ''), item: it.name, vals};
+  });
+  /* two listings in one shop: tell them apart by the shop's own name */
+  for (const s of series) if (series.filter(x => x.id === s.id).length > 1 && s.item) s.name += ' · ' + s.item;
+  const runs = mine.flatMap(it => itemStory(it, a, end).promos.map(x => ({...x, st: it.st}))).sort((x, y) => y.from - x.from);
+  const width = Math.min(680, sheet.clientWidth - 32 || 340);
+  sheet.innerHTML = `<div class="grab"></div><div class="sheet-bar"><span></span><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div>
+    <h2 class="det-name">${esc(name)}</h2>
+    <p class="sub">Ödənilən qiymət hər mağazada (endirim olanda endirimli qiymət)</p>
+    ${series.length ? lineChart('h-' + Date.now(), bk, series, {width, label: 'Qiymət tarixçəsi', fmt: v => fmtPrice(v), tip: v => fmtPrice(v) + ' ₼'}) : '<p class="sub">Bu məhsulun tarixçəsi hələ yoxdur.</p>'}
+    <h3 class="ana-h3">Endirimlər</h3>
+    ${runs.length ? `<table class="atable"><thead><tr><th>Mağaza</th><th>Tarix</th><th>Qiymət</th><th>Endirim</th></tr></thead><tbody>
+      ${runs.map(x => `<tr><td>${shopDot(x.st)}${esc(storeName(x.st))}</td><td>${fmtDayNo(x.from)}${x.to !== x.from ? ' – ' + fmtDayNo(x.to) : ''}</td><td>${fmtPrice(x.s)} <s>${fmtPrice(x.r)}</s></td><td>${x.pct}%</td></tr>`).join('')}</tbody></table>`
+      : '<p class="sub">Bu dövrdə endirim olmayıb.</p>'}`;
+  bindCharts(sheet);
+}
+
 /* ================= boot ================= */
 async function boot(){
   S.route = parseHash(); renderShell();
+  loadLive(); setInterval(() => loadLive(), 30 * 60e3);
   getEmbedder().then(() => { S.ai = 'ready'; dataChanged(); backfill(); }, () => { S.ai = 'error'; dataChanged(); });
   if (DEMO) {
     await LocalStore.init(); Store = LocalStore; seedDemo();
