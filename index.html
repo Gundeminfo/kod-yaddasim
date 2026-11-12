@@ -416,6 +416,22 @@ a.icon-btn{color:inherit;text-decoration:none}
 .hist-btn{margin-top:14px}
 .hist-btn svg{width:20px;height:20px}
 .ana-empty p{margin:6px 0}
+/* duplicate products */
+.dup-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 10px;font-weight:600}
+.dup-top .btn{height:42px;padding:0 16px}
+.dup-list{display:flex;flex-direction:column;gap:12px;padding-bottom:12px}
+.dup-card{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.dup-it{display:flex;align-items:center;gap:12px}
+.dup-it + .dup-it{padding-top:10px;border-top:1px dashed var(--line)}
+.dup-ph{flex:0 0 56px;height:56px;display:grid;place-items:center;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:#fff}
+.dup-ph img{width:100%;height:100%;object-fit:contain}
+.dup-ph i{font-style:normal;font-size:26px}
+.dup-tx{display:flex;flex-direction:column;gap:2px;min-width:0}
+.dup-tx b{font-size:15px;line-height:1.25;overflow-wrap:anywhere}
+.dup-tx span,.dup-tx small{font-size:13px;color:var(--muted)}
+.dup-keep{align-self:flex-start;padding:1px 8px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:11px;font-style:normal;font-weight:700}
+.dup-acts{display:flex;justify-content:flex-end;gap:8px}
+.dup-acts .btn{height:40px;padding:0 14px}
 </style>
 </head>
 <body>
@@ -1926,6 +1942,9 @@ function openOwnerSettings(){
     <section class="set-sec"><h3>Alt kateqoriyalar</h3>
       <p class="store-state">Məhsulları necə satıldığına (çəki və ya ədəd), adındakı məhsul sözünə və şəklinə görə ən uyğun alt kateqoriyaya yerləşdirir. Əllə seçdiyiniz yerlərə toxunmur.</p>
       <button class="btn ghost wide" id="s-repath">Avtomatik yenidən böl</button></section>
+    <section class="set-sec"><h3>Təkrarlanan məhsullar</h3>
+      <p class="store-state">Fərqli marketlərdən gələn eyni məhsulu tapır, məsələn Arazdakı «Roshen Korovka kq» və OBA-dakı «Roshen Karovka, 1 kg». Hər birinə baxıb bir karta birləşdirirsiniz.</p>
+      <button class="btn ghost wide" id="s-dups">Təkrarlananları tap</button></section>
     <section class="set-sec"><h3>Süni intellekt</h3><p class="store-state" id="s-ai">${aiText()}</p></section>
     <section class="set-sec"><h3>Hesab</h3>${accountBlock()}</section>
     <section class="set-sec"><h3>Ehtiyat nüsxə</h3><div class="stack">
@@ -1998,6 +2017,7 @@ function openOwnerSettings(){
     const done = await writePaths(changes, n => { btn.textContent = `Yerləşdirilir… ${n}/${changes.length}`; });
     btn.disabled = false; btn.textContent = 'Avtomatik yenidən böl'; toast(`${done} məhsul yerləşdirildi`);
   };
+  $('#s-dups', sheet).onclick = () => openDuplicates();
   $('#s-export', sheet).onclick = () => {
     const data = JSON.stringify({app: 'kod-yaddasim', v: 2, exportedAt: new Date().toISOString(), settings: S.settings, categories: S.cats,
       products: S.products.map(p => ({...p}))});
@@ -2712,6 +2732,108 @@ async function openHistory(p, key){
       ${runs.map(x => `<tr><td>${shopDot(x.st)}${esc(storeName(x.st))}</td><td>${fmtDayNo(x.from)}${x.to !== x.from ? ' – ' + fmtDayNo(x.to) : ''}</td><td>${fmtPrice(x.s)} <s>${fmtPrice(x.r)}</s></td><td>${x.pct}%</td></tr>`).join('')}</tbody></table>`
       : '<p class="sub">Bu dövrdə endirim olmayıb.</p>'}`;
   bindCharts(sheet);
+}
+
+/* ---------- one product listed twice: the same item imported from two shops ---------- */
+/* products of the same category and unit, from different shops, that the shop matcher calls the same */
+function findDuplicates(){
+  const no = new Set(Array.isArray(S.settings.notDup) ? S.settings.notDup : []);
+  const parts = new Map();
+  for (const p of S.products) {
+    const shops = storesOf(p); if (!p.name || !shops.length) continue;
+    const k = (p.catId || '') + '|' + (p.unit || '');
+    (parts.get(k) || parts.set(k, []).get(k)).push({name: p.name, shops: new Set(shops), p});
+  }
+  const out = [];
+  for (const list of parts.values()) {
+    if (list.length < 2) continue;
+    const root = famJoin(list), sets = new Map();
+    root.forEach((r, i) => { (sets.get(r) || sets.set(r, []).get(r)).push(list[i].p); });
+    for (const ps of sets.values()) {
+      if (ps.length < 2) continue;
+      const ids = ps.map(p => p.id).sort();
+      if (ids.some((a, i) => ids.slice(i + 1).some(b => no.has(a + '|' + b)))) continue;
+      out.push(ps.sort((a, b) => dupScore(b) - dupScore(a)));
+    }
+  }
+  return out.sort((a, b) => collator.compare(a[0].name, b[0].name));
+}
+/* the card that stays: the one with a barcode, a picture and a hand-picked place */
+const dupScore = p => (p.code ? 4 : 0) + (p.photo || p.photoUrl ? 2 : 0) + (p.pathManual ? 2 : 0) + (p.src === 'araz' || p.id.startsWith('araz-') || p.srcId != null ? 1 : 0) + storesOf(p).length;
+/* everything the others know goes onto the first card, then the others are removed */
+async function mergeProducts(lead, others){
+  const prices = {...(lead.prices || {})}, links = {...(lead.links || {})}, codes = codesOf(lead), patch = {};
+  let ph = Array.isArray(lead.ph) ? lead.ph.slice() : [];
+  const own = (o, st) => { if (links[st]) return;
+    const it = LIVE.idx && LIVE.idx[st] ? liveItem(o, st) : null;
+    if (it) { links[st] = it.id; return; }
+    if (st === 'araz' && o.srcId != null && (!o.src || o.src === 'araz')) links.araz = String(o.srcId);
+    else if (st === 'bazar' && o.id.startsWith('bz-')) links.bazar = o.id.slice(3);
+    else if (o.id.startsWith(st + '-')) links[st] = o.id.slice(st.length + 1);
+  };
+  for (const o of others) {
+    const ob = basePrices(o);
+    for (const [st, v] of Object.entries(ob)) if (!prices[st] || (v.at || 0) > (prices[st].at || 0)) prices[st] = {...((o.prices || {})[st] || {}), r: v.r, s: v.s ?? null, at: v.at || o.updatedAt || Date.now()};
+    for (const [st, id] of Object.entries(o.links || {})) if (id && !links[st]) links[st] = id;
+    for (const st of new Set([...Object.keys(ob), ...(LIVE.idx ? Object.keys(LIVE.idx) : [])])) if (!liveItem(lead, st)) own(o, st);
+    for (const [st, c] of Object.entries(codesOf(o))) if (!codes[st]) codes[st] = c;
+    if (!lead.code && !patch.code && o.code) patch.code = o.code;
+    if (!lead.photo && !lead.photoUrl && !patch.photo && !patch.photoUrl && (o.photo || o.photoUrl))
+      for (const f of ['photo', 'photoUrl', 'photoAlt', 'sig', 'emb', 'embModel', 'emb2', 'refs']) if (o[f] != null) patch[f] = o[f];
+    if (Array.isArray(o.ph)) ph = ph.concat(o.ph);
+  }
+  Object.assign(patch, {prices, links, codes, aka: [...new Set([...(Array.isArray(lead.aka) ? lead.aka : []), ...others.map(o => o.name)])].slice(-20),
+    updatedAt: Date.now(), updatedBy: myEmail()});
+  if (ph.length) patch.ph = ph.sort((a, b) => (a[3] || 0) - (b[3] || 0)).slice(-300);
+  if (prices[HOME_STORE] && lead.price == null) patch.price = prices[HOME_STORE].r;
+  await Store.patch('products', lead.id, patch);
+  for (const o of others) await Store.remove('products', o.id);
+}
+function openDuplicates(){
+  if (!can.admin()) return;
+  const node = el(`<div class="overlay"><div class="scrim"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Təkrarlanan məhsullar"></div></div>`);
+  const sheet = node.querySelector('.sheet');
+  const head = `<div class="grab"></div><div class="sheet-bar"><h2>Təkrarlanan məhsullar</h2><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div>`;
+  sheet.innerHTML = head + '<div class="loading">Axtarılır…</div>';
+  pushOverlay(node);
+  let sets = [];
+  const line = (p, keep) => {
+    const ps = pricesOf(p), u = UNIT_LABEL[p.unit] || 'kq', c = catById(p.catId);
+    const pr = Object.entries(ps).map(([st, x]) => `${esc(storeName(st))} ${fmtPrice(nowPrice(x))} ₼`).join(', ');
+    const code = fmtCode(p.code) || Object.values(codesOf(p))[0] || '';
+    const pic = p.photo || p.photoUrl;
+    return `<div class="dup-it"><span class="dup-ph">${pic ? `<img src="${esc(pic)}" alt="" loading="lazy" decoding="async">` : `<i>${esc(c ? c.emoji : '📦')}</i>`}</span>
+      <span class="dup-tx">${keep ? '<em class="dup-keep">Qalır</em>' : ''}<b>${esc(p.name)}</b><span>${pr ? pr + ' / ' + u : 'Qiymət yoxdur'}</span>${code ? `<small>Kod ${esc(code)}</small>` : ''}</span></div>`;
+  };
+  const draw = () => {
+    const n = sets.length;
+    sheet.innerHTML = head + (n ? `<p class="store-state">Fərqli marketlərdən gələn eyni məhsul iki kart olub. «Birləşdir» basanda <b>birinci kart qalır</b>: digərinin qiymətləri, kodu və şəkli ona keçir, özü silinir. Sonra robot bütün marketlərin qiymətini bu bir kartda göstərir.</p>
+      <div class="dup-top"><span>${n} təkrar tapıldı</span><button class="btn" id="dup-all">Hamısını birləşdir</button></div>
+      <div class="dup-list">${sets.map((ps, i) => `<div class="dup-card" data-i="${i}">${ps.map((p, j) => line(p, j === 0)).join('')}
+        <div class="dup-acts"><button class="btn ghost" data-act="no">Fərqlidir</button><button class="btn" data-act="yes">Birləşdir</button></div></div>`).join('')}</div>`
+      : `<div class="empty-state"><p>Təkrarlanan məhsul tapılmadı.</p></div>`);
+    const all = $('#dup-all', sheet);
+    if (all) all.onclick = async () => {
+      if (!await askConfirm(`${n} təkrarın hər birində birinci kart qalacaq, digərləri silinəcək. Davam edilsin?`, 'Birləşdir')) return;
+      all.disabled = true; let k = 0;
+      for (const ps of sets.slice()) { try { await mergeProducts(ps[0], ps.slice(1)); } catch (e) {} all.textContent = `Birləşdirilir… ${++k}/${n}`; }
+      sets = []; draw(); toast(`${k} təkrar birləşdirildi`);
+    };
+  };
+  sheet.addEventListener('click', async e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const card = b.closest('.dup-card'), ps = sets[+card.dataset.i]; if (!ps) return;
+    b.disabled = true;
+    if (b.dataset.act === 'yes') { try { await mergeProducts(ps[0], ps.slice(1)); toast('Birləşdirildi'); } catch (err) { toast('Alınmadı, yenidən cəhd edin'); b.disabled = false; return; } }
+    else {
+      const ids = ps.map(p => p.id).sort(), keys = [];
+      ids.forEach((a, i) => ids.slice(i + 1).forEach(x => keys.push(a + '|' + x)));
+      saveSettings({notDup: [...new Set([...(Array.isArray(S.settings.notDup) ? S.settings.notDup : []), ...keys])].slice(-3000)});
+      toast('Bir daha göstərilməyəcək');
+    }
+    sets.splice(+card.dataset.i, 1); draw();
+  });
+  setTimeout(() => { sets = findDuplicates(); draw(); }, 30);
 }
 
 /* ================= boot ================= */
