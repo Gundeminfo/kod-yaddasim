@@ -2308,6 +2308,114 @@ const productByName = name => { productOfItem(''); return nameMap.get(itemNameKe
 const eanOf = t => { const L = LIVE.idx && LIVE.idx[t.st], it = L && L.byId.get(t.id), c = it && it.code; return c && /^\d{8}$|^\d{12,14}$/.test(c) && !/^10000/.test(c) ? c : null; };
 /* the same name in two shops, written a little differently: "Kit Kat 41 q" = "KIT KAT 41QR" */
 const itemNameKey = s => norm(s).replace(/(\d)\s+(?=(qr|gr|q|g|kq|kg|ml|l)\b)/g, '$1').replace(/(\d)(qr|gr|g)\b/g, '$1q').replace(/(\d)kg\b/g, '$1kq').replace(/[^a-z0-9]+/g, ' ').trim();
+/*FAM*/
+/* ---------- the same product in different shops ----------
+   Shops write one product differently ("Kit Kat 41 q", "KITKAT 41QR", "Nestle Kit Kat 4 Finger 41.5 qr"), and most shops give no
+   barcode, so two listings count as one product when: the weight is the same, the flavours are the same (fındıqlı ≠ südlü), and the
+   name words left after dropping common words (şokolad, plitka, vafli...) match. Two listings of one shop never join. */
+const FAM_GENERIC = new Set(('sokolad sok sokoladi plitka plitkada konfet konfeti konfetler pecenye pecenya pecenyesi vafli vafl tort keks kek baton batonu bar '
+  + 'desert qutu qutuda paket set eded edli ed x qr gr kq kg ml cesidleri cesid shokolad chocolate shokoladi plus the and ve ile li lu with original klassik classic yeni').split(' '));
+const FAM_FLAV = (() => { const m = new Map();
+  for (const g of ['findiq findiqli findik findikli hazelnut', 'badam badamli almond', 'araxis araxisli yerfistiq yerfistiqli yerfistigi peanut', 'fistiq fistiqli pistachio fisdiq',
+    'kokos kokoslu coconut kokosovoy', 'ciyelek ciyelekli strawberry klubnika', 'moruq moruqlu raspberry malina', 'banan bananli banana', 'karamel karamelli caramel',
+    'qaymaq qaymaqli kremli cream krem', 'tund aci bitter dark qara', 'ag white beliy', 'vanil vanilli vanilla', 'kakao kakaolu cocoa', 'limon limonlu lemon', 'alma almali apple',
+    'portagal portagalli orange', 'albali albalili cherry visne', 'erik erikli', 'nane naneli mint', 'kofe qehve qehveli coffee kapucino', 'duzlu salty', 'kismis kismisli raisin uzum uzumlu',
+    'sudlu sud milk milky molocniy', 'qatilasdirilmis', 'meyveli fruit', 'sokoladli shokoladli', 'sekersiz', 'sade plain'])
+  { const ws = g.split(' '); for (const w of ws) m.set(w, ws[0]); }
+  return m; })();
+/* grams, 0 for goods sold by the kilo, null when the name gives none */
+function famWeight(n){
+  const m = [...n.matchAll(/(\d+(?:[.,]\d+)?)\s*(qram|gram|qr|gr|kq|kg|q|g)(?![a-z])/g)];
+  if (!m.length) return /(^|[^a-z])(kq|kg|ceki)([^a-z]|$)/.test(n) ? 0 : null;
+  const [, v, u] = m[m.length - 1];
+  return u === 'kq' || u === 'kg' ? 0 : parseFloat(v.replace(',', '.'));
+}
+function famSig(n){
+  const t = n.replace(/\d+(?:[.,]\d+)?\s*(qram|gram|qr|gr|kq|kg|ml|q|g|l)?(?![a-z])/g, ' ').replace(/[^a-z0-9]+/g, ' ').split(' ').filter(x => x.length > 1 && !/\d/.test(x));
+  return {fl: [...new Set(t.filter(x => FAM_FLAV.has(x)).map(x => FAM_FLAV.get(x)))].sort().join(','), core: [...new Set(t.filter(x => !FAM_FLAV.has(x) && !FAM_GENERIC.has(x)))]};
+}
+function famWordEq(a, b){
+  if (a === b) return true;
+  if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) return true;
+  if (a.length >= 5 && b.length >= 5 && Math.abs(a.length - b.length) <= 1) {   // one letter different: sholen / solen
+    let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    return a.slice(i + 1) === b.slice(i + 1) || a.slice(i + 1) === b.slice(i) || a.slice(i) === b.slice(i + 1);
+  }
+  return false;
+}
+function famSame(A, B){
+  if (A.fl !== B.fl || !A.core.length || !B.core.length) return false;
+  const m = A.core.filter(x => B.core.some(y => famWordEq(x, y))).length, mb = B.core.filter(y => A.core.some(x => famWordEq(x, y))).length;
+  if (m === A.core.length && mb === B.core.length) return true;
+  const k = Math.min(m, mb);
+  return k >= 2 && k >= Math.min(A.core.length, B.core.length) && k / Math.max(A.core.length, B.core.length) >= 0.6;
+}
+/* groups: [{name, shops: Set, pid}] -> parent index for each; the caller keeps the groups that have the same root together */
+function famJoin(groups){
+  const parent = groups.map((_, i) => i), shops = groups.map(g => new Set(g.shops)), pid = groups.map(g => g.pid || null);
+  const find = i => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const info = groups.map(g => { const n = norm(g.name); const w = famWeight(n); return {w, sig: famSig(n)}; });
+  const buckets = new Map();
+  info.forEach((x, i) => { if (x.w == null || !x.sig.core.length) return; const k = x.w === 0 ? 'kq' : Math.round(x.w); (buckets.get(k) || buckets.set(k, []).get(k)).push(i); });
+  const order = groups.map((_, i) => i).sort((x, y) => groups[y].shops.size - groups[x].shops.size);
+  for (const i of order) {
+    const x = info[i]; if (x.w == null || !x.sig.core.length) continue;
+    const near = x.w === 0 ? [buckets.get('kq')] : [-1, 0, 1].map(d => buckets.get(Math.round(x.w) + d));
+    for (const list of near) if (list) for (const j of list) {
+      if (j === i) continue;
+      const y = info[j];
+      if (x.w !== 0 && Math.abs(x.w - y.w) > Math.max(0.6, 0.02 * Math.max(x.w, y.w))) continue;
+      const ri = find(i), rj = find(j); if (ri === rj) continue;
+      let clash = false; for (const s of shops[rj]) if (shops[ri].has(s)) { clash = true; break; }
+      if (clash || (pid[ri] && pid[rj] && pid[ri] !== pid[rj])) continue;
+      if (!famSame(x.sig, y.sig)) continue;
+      parent[rj] = ri; for (const s of shops[rj]) shops[ri].add(s); pid[ri] = pid[ri] || pid[rj];
+    }
+  }
+  return groups.map((_, i) => find(i));
+}
+/*FAM-END*/
+/* every listing's product family, worked out once for the history that is loaded */
+let famCache = {sig: ''};
+const famBaseKey = t => {
+  const p = t.pid ? S.products.find(x => x.id === t.pid) : productOfItem(t.key) || productByName(t.name);
+  const ean = !p && eanOf(t);
+  return {p, gk: p ? p.id : ean ? 'e:' + ean : 'n:' + itemNameKey(t.name)};
+};
+function families(){
+  const months = [...HIST.keys()].sort();
+  const manual = S.products.reduce((n, p) => n + (Array.isArray(p.ph) ? p.ph.length : 0), 0);
+  const sig = [LIVE.v, S.products.length, manual, ...months.map(m => m + ':' + ((HIST.get(m) || {}).ev || []).length)].join('|');
+  if (famCache.sig === sig) return famCache;
+  const {items} = timelines(months, null);
+  const base = new Map(), keyOf = new Map();
+  for (const t of items.values()) {
+    const {p, gk} = famBaseKey(t);
+    let g = base.get(gk); if (!g) { g = {gk, p, pid: p ? p.id : null, name: p ? p.name : t.name, shops: new Set(), names: new Set()}; base.set(gk, g); }
+    g.shops.add(t.st); if (t.name) g.names.add(t.name); keyOf.set(t.key, gk);
+  }
+  const groups = [...base.values()], root = famJoin(groups);
+  /* a family is called by its product in the base when it has one, otherwise by the listing found in most shops */
+  const members = new Map();
+  groups.forEach((g, i) => { const r = root[i]; (members.get(r) || members.set(r, []).get(r)).push(g); });
+  const ofGk = new Map(), info = new Map();
+  const caps = n => n === n.toLocaleUpperCase('az');
+  for (const list of members.values()) {
+    const lead = list.find(g => g.p) || list.slice().sort((x, y) => y.shops.size - x.shops.size || caps(x.name) - caps(y.name) || x.name.length - y.name.length)[0];
+    const fk = lead.gk;
+    for (const g of list) ofGk.set(g.gk, fk);
+    info.set(fk, {p: lead.p || null, name: lead.name, text: norm(list.flatMap(g => [g.name, ...g.names]).join(' | '))});
+  }
+  const of = new Map(); for (const [k, gk] of keyOf) of.set(k, ofGk.get(gk));
+  famCache = {sig, of, ofGk, info};
+  return famCache;
+}
+/* the family of one listing (a listing seen after the families were worked out stays on its own) */
+function famOf(F, t){
+  const fk = F.of.get(t.key); if (fk) return [fk, F.info.get(fk)];
+  const {p, gk} = famBaseKey(t), k = F.ofGk.get(gk) || gk;
+  return [k, F.info.get(k) || {p, name: p ? p.name : t.name, text: norm(t.name)}];
+}
 /* ---------- colours: one per shop, fixed order, never by rank ---------- */
 const storeSlot = id => { const i = STORES.findIndex(s => s.id === id); return i < 0 ? 8 : Math.min(i + 1, 8); };
 const storeVar = id => `var(--s${storeSlot(id)})`;
@@ -2488,14 +2596,12 @@ function analizBody(a, b, months){
     <p>Robot hər səhər marketlərin saytlarına baxıb qiymətləri yazır. İlk günlərdən sonra burada endirimlər, qiymət dəyişiklikləri və qrafiklər görünəcək.</p></div>`;
   const end = Math.min(b, last != null ? last : b);
   /* items grouped by product */
-  const groups = new Map();
+  const groups = new Map(), F = families();
   for (const t of items.values()) {
-    const p = t.pid ? S.products.find(x => x.id === t.pid) : productOfItem(t.key) || productByName(t.name);
+    const [gk, fi] = famOf(F, t), p = fi.p;
     if (ANA.path) { const ph = p ? pathOf(p).join(' › ') : ''; if (!ph.startsWith(ANA.path)) continue; }
-    const name = p ? p.name : t.name;
-    if (q && !norm(name).includes(q)) continue;
-    const ean = !p && eanOf(t);
-    const gk = p ? p.id : ean ? 'e:' + ean : 'n:' + itemNameKey(name);
+    const name = fi.name;
+    if (q && !fi.text.includes(q)) continue;
     let g = groups.get(gk); if (!g) { g = {key: gk, p, name, items: [], promos: [], moves: []}; groups.set(gk, g); }
     const st = itemStory(t, a, end);
     g.items.push(t);
@@ -2506,7 +2612,7 @@ function analizBody(a, b, months){
   if (!gl.length) return `<div class="empty-state ana-empty"><p>Bu seçimə uyğun məhsul tapılmadı.</p></div>`;
   const shopIds = [...new Set(gl.flatMap(g => g.items.map(t => t.st)))].sort((x, y) => storeSlot(x) - storeSlot(y));
   /* headline figures */
-  const onPromo = gl.filter(g => g.promos.length);
+  const onPromo = gl.filter(g => g.promos.length), inBase = gl.filter(g => g.p).length;
   const pcts = onPromo.flatMap(g => g.promos.map(x => x.pct));
   const avgPct = pcts.length ? Math.round(pcts.reduce((s, v) => s + v, 0) / pcts.length) : 0;
   const ups = gl.flatMap(g => g.moves).filter(m => m.to > m.from).length, downs = gl.flatMap(g => g.moves).filter(m => m.to < m.from).length;
@@ -2545,7 +2651,7 @@ function analizBody(a, b, months){
   const moves = gl.flatMap(g => g.moves.map(m => ({...m, g}))).sort((x, y) => y.day - x.day).slice(0, 60);
   return `
     <div class="kpis">
-      <div class="kpi"><span>İzlənən məhsul</span><b>${gl.length.toLocaleString('az')}</b></div>
+      <div class="kpi"><span>İzlənən məhsul</span><b>${gl.length.toLocaleString('az')}</b><small>${inBase.toLocaleString('az')} bazada, ${(gl.length - inBase).toLocaleString('az')} yalnız marketlərdə</small></div>
       <div class="kpi"><span>Endirimə düşən</span><b>${onPromo.length.toLocaleString('az')}</b></div>
       <div class="kpi"><span>Orta endirim</span><b>${avgPct}%</b></div>
       <div class="kpi"><span>Qiyməti dəyişən</span><b>${(ups + downs).toLocaleString('az')}</b><small>${ups} artım · ${downs} azalma</small></div>
@@ -2585,11 +2691,9 @@ async function openHistory(p, key){
   await loadHist(months);
   const {items, last} = timelines(months, null);
   const end = Math.min(t, last != null ? last : t);
-  const mine = [...items.values()].filter(it => {
-    const q = it.pid ? S.products.find(x => x.id === it.pid) : productOfItem(it.key) || productByName(it.name);
-    return p ? q === p : !q && (key.startsWith('e:') ? 'e:' + eanOf(it) === key : key.startsWith('n:') ? !eanOf(it) && 'n:' + itemNameKey(it.name) === key : it.key === key);
-  });
-  const name = p ? p.name : (mine[0] && mine[0].name) || '';
+  const F = families(), fk = p ? (F.ofGk.get(p.id) || p.id) : key;
+  const mine = [...items.values()].filter(it => famOf(F, it)[0] === fk);
+  const name = p ? p.name : (F.info.get(fk) || {}).name || (mine[0] && mine[0].name) || '';
   const bk = buckets(a, end);
   const series = mine.map(it => {
     const vals = bk.map(u => { let v = null; for (const [d, r, s] of it.pts) { if (d > u.b) break; v = r == null ? null : (s != null && s < r ? s : r); } return v; });
