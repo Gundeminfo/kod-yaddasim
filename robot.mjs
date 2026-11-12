@@ -42,7 +42,8 @@ async function main(){
     try {
       const list = await withTimeout(st.collect({log: (...a) => console.log(`[${st.id}]`, ...a)}), TIME_LIMIT, st.id);
       const items = {};
-      for (const it of list) if (it && it.id && it.r != null) items[it.id] = [it.name, it.r, it.s ?? null, it.unit || '', it.img || '', it.code || ''];
+      /* pictures stay out: the app does not need them and they would make the daily file four times larger */
+      for (const it of list) if (it && it.id && it.r != null) items[it.id] = [it.name, it.r, it.s ?? null, it.unit || '', '', it.code || ''];
       const n = Object.keys(items).length;
       if (!n || (before > 40 && n < before * 0.6)) throw new Error(`az məhsul: ${n} (əvvəl ${before})`);
       latest.items[st.id] = items;
