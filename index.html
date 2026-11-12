@@ -333,6 +333,9 @@ textarea.inp{height:110px;padding:10px 14px;resize:vertical;font-size:13px}
 .ph-emo{font-style:normal;line-height:1}
 .ph img,.det-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#fff}
 .ph img.ext,.det-photo img.ext{object-fit:contain;padding:6%}
+.ph img.ext,.det-photo img.ext{opacity:0;transition:opacity .15s}
+.ph img.ext.ok,.det-photo img.ext.ok{opacity:1}
+@media (prefers-reduced-motion:reduce){.ph img.ext,.det-photo img.ext{transition:none}}
 .ph img.ext.lowres{padding:18%}
 .det-photo img.ext.lowres{padding:20%}
 
@@ -893,17 +896,22 @@ function pathModel(catId){
 }
 function guessPath(p, model){
   const kg = p.unit === 'kq', toks = toksOf(p.name);
-  let best = null;
+  const named = g => toks.some(t => g.head.has(t) || g.tail.has(t));
+  let best = null, other = null;
   for (const g of model.groups) {
-    if ((g.path[0] === 'Şirniyyat çəki') !== kg && g.path[0] !== 'Səhər yeməkləri') continue;
+    const sameUnit = (g.path[0] === 'Şirniyyat çəki') === kg || g.path[0] === 'Səhər yeməkləri';
+    if (!sameUnit && !named(g)) continue;
     let s = 0;
     for (const t of toks) {
       const w = model.idf(t);
       if (g.head.has(t)) s += 3 * w; else if (g.tail.has(t)) s += 1.5 * w;
       const c = g.cnt.get(t) || 0; if (c) s += w * Math.min(1, c / 3);
     }
-    if (!best || s > best.s) best = {g, s};
+    if (sameUnit) { if (!best || s > best.s) best = {g, s}; }
+    else if (!other || s > other.s) other = {g, s};
   }
+  /* a packet of "Korovka" goes to the Karovka branch even when Araz keeps that branch only by weight */
+  if (other && other.s >= 2 && !(best && named(best.g))) best = other;
   return best && best.s >= 2 ? best.g.path : null;
 }
 function repathChanges(){
@@ -935,7 +943,7 @@ async function writePaths(changes, onStep){
   return done;
 }
 /* the owner's app sorts the shop products into branches once by itself */
-const AUTO_PATH_V = 1;
+const AUTO_PATH_V = 2;
 let autoPathBusy = false;
 async function autoRepath(){
   if (DEMO || S.role !== 'owner' || autoPathBusy || !S.synced.products || !S.got.categories || !S.synced.settings) return;
@@ -1087,11 +1095,25 @@ function photoHtml(p, c, big = false){
   const src = big ? (hdReady.get(p.photoUrl) || p.photo || p.photoUrl) : p.photo;
   if (!src) return emo;
   const ext = !ownPhoto(p) && !(big && hdReady.has(p.photoUrl));
-  return `<i class="ph-emo" aria-hidden="true">${emo}</i><img src="${esc(src)}" alt="${big ? esc(p.name) : ''}" ${big ? '' : 'loading="lazy"'} decoding="async"`
-    + (ext ? ` class="ext" data-alt="${esc(p.photoAlt || '')}" onload="kyImgOk(this)" onerror="kyImgBad(this)">` : '>');
+  if (!ext) return `<i class="ph-emo" aria-hidden="true">${emo}</i><img src="${esc(src)}" alt="${big ? esc(p.name) : ''}" ${big ? '' : 'loading="lazy"'} decoding="async">`;
+  /* another shop's picture stays hidden until its size is known, so it never jumps */
+  const known = sizeHints ? extSize.get(src) : null, url = known === 'bad' && p.photoAlt ? p.photoAlt : src, k = sizeHints ? extSize.get(url) : null;
+  if (k === 'bad') return emo;
+  const cls = k ? 'ext ok' + (k === 'small' ? ' lowres' : '') : 'ext';
+  return `<i class="ph-emo" aria-hidden="true">${emo}</i><img src="${esc(url)}" alt="${big ? esc(p.name) : ''}" ${big ? '' : 'loading="lazy"'} decoding="async"`
+    + ` class="${cls}" data-alt="${esc(url === src ? p.photoAlt || '' : '')}" onload="kyImgOk(this)" onerror="kyImgBad(this)">`;
 }
-window.kyImgOk = img => { if (img.naturalWidth && Math.max(img.naturalWidth, img.naturalHeight) < 280) img.classList.add('lowres'); };
-window.kyImgBad = img => { const a = img.dataset.alt; if (a && img.getAttribute('src') !== a) { img.dataset.alt = ''; img.src = a; } else img.remove(); };
+const extSize = new Map();   // shop picture address -> 'small' | 'big' | 'bad'
+let sizeHints = true;        // off while a card's look is compared: what we learnt about a picture is not a change
+window.kyImgOk = img => {
+  const small = img.naturalWidth && Math.max(img.naturalWidth, img.naturalHeight) < 280;
+  extSize.set(img.getAttribute('src'), small ? 'small' : 'big');
+  img.classList.toggle('lowres', !!small); img.classList.add('ok');
+};
+window.kyImgBad = img => {
+  extSize.set(img.getAttribute('src'), 'bad');
+  const a = img.dataset.alt; if (a && img.getAttribute('src') !== a) { img.dataset.alt = ''; img.classList.remove('ok', 'lowres'); img.src = a; } else img.remove();
+};
 function productCard(p, showCat){
   const c = catById(p.catId), m = mainPrice(p);
   return `<button class="card" data-id="${esc(p.id)}" style="--t:${tintOf(c)}">
@@ -1104,7 +1126,34 @@ function productCard(p, showCat){
   </button>`;
 }
 function bindCards(root){
-  $$('.card', root).forEach(b => b.addEventListener('click', () => { const p = S.products.find(x => x.id === b.dataset.id); if (p) openDetail(p); }));
+  $$('.card', root).forEach(bindCard);
+}
+function bindCard(b){ b.addEventListener('click', () => { const p = S.products.find(x => x.id === b.dataset.id); if (p) openDetail(p); }); }
+/* draws a card list into box, keeping every card whose look has not changed: its picture
+   is not loaded again, so pictures do not flicker when data arrives or more cards are added */
+function putCards(box, head, list, showCat){
+  let grid = box.querySelector(':scope > .grid'), top = box.querySelector(':scope > .cards-head'), tail = box.querySelector(':scope > .cards-tail');
+  if (!grid || !top || !tail) {
+    box.innerHTML = '<div class="cards-head"></div><div class="grid"></div><div class="cards-tail"></div>';
+    top = box.firstElementChild; grid = top.nextElementSibling; tail = grid.nextElementSibling;
+  }
+  if (top.innerHTML !== head) top.innerHTML = head;
+  const shown = list.slice(0, S.limit), rest = list.length - shown.length;
+  const old = new Map([...grid.children].map(e => [e.dataset.id, e]));
+  let prev = null;
+  for (const p of shown) {
+    sizeHints = false; let h; try { h = productCard(p, showCat); } finally { sizeHints = true; }
+    let e = old.get(p.id);
+    if (e && e._h === h) old.delete(p.id);
+    else { e = el(productCard(p, showCat)); e._h = h; bindCard(e); }
+    const want = prev ? prev.nextElementSibling : grid.firstElementChild;
+    if (e !== want) grid.insertBefore(e, want);
+    prev = e;
+  }
+  for (const e of old.values()) e.remove();
+  const more = rest > 0 ? `<button class="btn ghost wide more" id="more">Daha çox göstər (${rest} qalıb)</button>` : '';
+  if (tail.innerHTML !== more) tail.innerHTML = more;
+  bindMore(box);
 }
 /* a long list draws PAGE cards at a time; the rest come in as you scroll */
 function cardList(list, showCat){
@@ -1193,15 +1242,13 @@ function renderContent(){
       box.innerHTML = '<div class="empty-state"><p>Bu seçimdə məhsul yoxdur.</p></div>'; return;
     }
     const filtered = S.q.trim() || S.sel.length || S.saleOnly || S.shop;
-    box.innerHTML = (filtered ? `<p class="meta" style="margin:0 0 10px">${list.length} məhsul</p>` : '') + cardList(list);
-    bindCards(box); bindMore(box); return;
+    putCards(box, filtered ? `<p class="meta" style="margin:0 0 10px">${list.length} məhsul</p>` : '', list); return;
   }
   meta.textContent = `${S.cats.length} kateqoriya, ${S.products.length} məhsul`;
   if (S.q.trim()) {
     const list = searchProducts(S.q);
     if (!list.length) { box.innerHTML = noResults(); bindNoResults(); return; }
-    box.innerHTML = `<p class="meta" style="margin:0 0 10px">${list.length} nəticə</p>${cardList(list, true)}`;
-    bindCards(box); bindMore(box); return;
+    putCards(box, `<p class="meta" style="margin:0 0 10px">${list.length} nəticə</p>`, list, true); return;
   }
   if (!S.cats.length) {
     box.innerHTML = `<div class="empty-state"><p>Kateqoriya yoxdur.</p>${can.admin() ? '<button class="btn" id="mk-cats">Standart kateqoriyaları yarat</button>' : ''}</div>`;
@@ -1260,10 +1307,13 @@ function openDetail(p, opts = {}){
     const cs = codesOf(cur), ck = cs[HOME_STORE] ? HOME_STORE : Object.keys(cs)[0], storeCode = ck ? cs[ck] : '';
     const copyVal = code ? (digits(cur.code) || cur.code) : storeCode;
     sheet.style.setProperty('--t', tintOf(c));
+    sizeHints = false; let key; try { key = photoHtml(cur, c, true); } finally { sizeHints = true; }
+    const photo = photoHtml(cur, c, true), oldPhoto = sheet._photo === key ? $('.det-photo', sheet) : null;
+    sheet._photo = key;
     sheet.innerHTML = `
       <div class="grab"></div>
       <div class="sheet-bar"><span></span><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div>
-      <div class="det-photo">${photoHtml(cur, c, true)}</div>
+      <div class="det-photo">${photo}</div>
       <p class="det-cat">${c ? esc(c.emoji + ' ' + c.name) : 'Kateqoriyasız'}${pathOf(cur).length ? ' › ' + pathOf(cur).map(esc).join(' › ') : ''}</p>
       <h2 class="det-name">${esc(cur.name)}</h2>
       <div class="det-price">${priceTag(cur)}</div>
@@ -1283,9 +1333,11 @@ function openDetail(p, opts = {}){
         let out = url;
         try { out = fitBox(big, trimBox(big), 900).toDataURL('image/jpeg', 0.9); } catch (e) {}
         hdReady.set(url, out);
-        const im = $('.det-photo img', sheet); if (im) im.src = out;
+        const im = $('.det-photo img', sheet);
+        if (im) { im.classList.remove('ext', 'ok', 'lowres'); im.src = out; sizeHints = false; try { sheet._photo = photoHtml(S.products.find(x => x.id === p.id) || cur, c, true); } finally { sizeHints = true; } }
       }, () => {});
     }
+    if (oldPhoto) $('.det-photo', sheet).replaceWith(oldPhoto);
     const cp = $('#d-copy', sheet);
     if (cp) cp.onclick = async () => toast(await copyText(copyVal) ? 'Kod kopyalandı' : 'Kopyalamaq olmadı');
     const pe = $('#d-prices-edit', sheet);
