@@ -512,7 +512,8 @@ function basePrices(p){
       out[k] = {...v, r, s: s != null && s < r ? s : null};
     }
   }
-  if (!out[HOME_STORE] && money(p.price) != null) out[HOME_STORE] = {r: money(p.price), s: null};
+  /* the oldest products kept one Araz price in p.price; newer ones keep p.price only as a copy of their first shop's price */
+  if (!Object.keys(out).length && money(p.price) != null) out[HOME_STORE] = {r: money(p.price), s: null};
   return out;
 }
 const nowPrice = x => x.s != null ? x.s : x.r;
