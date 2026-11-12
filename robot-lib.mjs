@@ -84,7 +84,7 @@ export const SWEET = /sirniyyat|sokolad|konfet|karamel|karovka|korovka|iris|vafl
    One Bakı branch stands for the chain; the first branch on the list that answers is used. */
 const API = 'https://consumer-api.wolt.com/consumer-api/consumer-assortment/v1/venues/slug/';
 const SWEET_CAT = /sirniyyat|sokolad|konfet|pecen|vafli|tort|keks|rulet|biskvit|saqqiz|desert|marmelad|zefir|lokum|halva|sweets|chocolate|candy|cookie|confection/;
-const NOT_CAT = /^seker$|dondurma|icki|kofe|cay\b|^bal$|murebbe|^cem$|kakao|isti sokolad|donmus|meyve|terevez/;
+const NOT_CAT = /^seker$|dondurma|icki|kofe|cay\b|^bal$|murebbe|^cem$|kakao|isti sokolad|donmus|^meyve$|^terevez|meyve ve terevez|endirim|sudlu desert/;
 const HEAD = {accept: 'application/json', origin: 'https://wolt.com', referer: 'https://wolt.com/'};
 
 function sweetCats(cats){
