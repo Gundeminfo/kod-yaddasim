@@ -316,6 +316,7 @@ textarea.inp{height:110px;padding:10px 14px;resize:vertical;font-size:13px}
 #filters:empty{display:none}
 .frow{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0;margin:0 calc(-1 * var(--pad));padding-left:var(--pad);padding-right:var(--pad);scroll-padding:0 var(--pad)}
 .frow::-webkit-scrollbar{display:none}
+.frow{overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
 .frow + .frow{margin-top:6px}
 .fchip{flex:none;height:38px;padding:0 13px;border-radius:19px;border:1.5px solid var(--line);background:var(--surface);font-size:14px;font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:6px}
 .fchip b{font-weight:600;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
@@ -558,6 +559,8 @@ async function loadFirebase(){
     },
     put(col, id, data){ const b = {...data}; delete b.id; return fsM.setDoc(fsM.doc(db, col, id), b); },
     patch(col, id, fields){ return fsM.updateDoc(fsM.doc(db, col, id), fields); },
+    /* many small changes in one write: the screen updates once instead of per product */
+    patchMany(col, list){ const b = fsM.writeBatch(db); for (const [id, f] of list) b.update(fsM.doc(db, col, id), f); return b.commit(); },
     remove(col, id){ return fsM.deleteDoc(fsM.doc(db, col, id)); },
     watchDoc(col, id, cb, onErr){
       return fsM.onSnapshot(fsM.doc(db, col, id),
@@ -873,84 +876,194 @@ async function backfill(){
 }
 
 /* ================= search ================= */
-/* ---------- sub-categories for products from other shops ----------
+/* ---------- sub-categories: how a product is sold, what it is, what it looks like ----------
    Araz files its own products in a tree (Şirniyyat çəki › Karovka çəki › Karovka klassik).
-   A product from another shop is put on the branch whose names and whose Araz products
-   share the most words with it; words of the branch names count most. */
+   1) How it is sold decides the top: a price per kilo ("kq") means it is weighed → Şirniyyat çəki;
+      a fixed pack (200 q), a box or a toy egg is taken as one piece → Şirniyyat ədəd.
+   2) What it is decides the branch: the product word in the name ("peçenye", "vafli") outranks
+      a taste word ("karovkalı", "şokoladlı"); a chocolate karovka goes with the chocolates.
+   3) What it looks like settles the rest: products whose photo resembles the Araz products of a
+      branch lean to that branch. */
 const TOK_STOP = new Set(['ceki', 'eded', 'kq', 'kg', 'qr', 'gr', 'sade', 'diger', 'ile', 'li', 'lu', 'assor', 'mix', 'yeni', 'mini', 'klassi']);
 const translit = s => norm(s).replace(/sh/g, 's').replace(/ch/g, 'c').replace(/zh/g, 'j').replace(/kh/g, 'x').replace(/w/g, 'v');
-const stem = t => { t = t.replace(/^korov/, 'karov').replace(/^shok|^chok|^cok|^chocol|^cikol/, 'sokol').replace(/^pechen|^pecen/, 'pecen').replace(/^vafl|^wafl|^wafer/, 'vafli').replace(/^gofr/, 'vafli');
-  return t.length > 6 ? t.slice(0, 6) : t; };
-const toksOf = s => [...new Set(translit(s).replace(/[^a-z0-9 ]+/g, ' ').split(' ').filter(w => w.length >= 3 && !/^\d/.test(w)).map(stem).filter(t => !TOK_STOP.has(t)))];
+const stem = t => {
+  if (/^(vafl|vafer|gofr)/.test(t)) return 'vafli';
+  if (/^(korov|karov)/.test(t)) return 'karov';
+  if (/^(sokol|cokol|cocol|cikol|shok|chok)/.test(t)) return 'sokol';
+  if (/^(pecen|pechen)/.test(t)) return 'pecen';
+  return t.length > 6 ? t.slice(0, 6) : t;
+};
+/* words of a name: {t: stem, mod: true for a taste word such as "şokoladlı", "südlü"} */
+const wordsOf = s => {
+  const seen = new Map();
+  for (const w of translit(s).replace(/[^a-z0-9 ]+/g, ' ').split(' ')) {
+    if (w.length < 3 || /^\d/.test(w)) continue;
+    const t = stem(w); if (TOK_STOP.has(t)) continue;
+    const mod = w.length >= 5 && /(li|lu)$/.test(w);
+    if (!seen.has(t) || (seen.get(t) && !mod)) seen.set(t, mod);
+  }
+  return [...seen].map(([t, mod]) => ({t, mod}));
+};
+const toksOf = s => wordsOf(s).map(w => w.t);
+const stems = ws => new Set(ws.map(w => stem(translit(w))));
+const BAKED = stems(['peçenye', 'pechenye', 'cookie', 'kurabiye', 'ovsyanka', 'galeta', 'vafli', 'wafer', 'gofret', 'tort', 'keks', 'rulet', 'kreker', 'krekers', 'biskvit', 'pryanik', 'kruassan', 'suşka', 'baranka']);
+const SOFT = stems(['karovka', 'korovka', 'iris', 'toffee', 'tofi']);
+const CHOC = stems(['şokolad']);
+const TOY = stems(['oyuncaq', 'oyuncaqlı', 'yumurta', 'surpriz', 'surprise', 'kinder']);
+const BOX = stems(['qutu', 'kutu', 'box', 'hədiyyə', 'hədiyyəlik', 'gift', 'dəst']);
+const TOP_KG = 'Şirniyyat çəki', TOP_ED = 'Şirniyyat ədəd';
+/* 'kq' when the name says it is sold by the kilo, 'ed' when it is a pack, a box or a toy, null when it does not say;
+   strongOnly: a bare pack weight ("200 q") is then not enough */
+function saleKind(name, strongOnly){
+  const f = norm(name);
+  if (/\b(qutu|kutu|box|hediyye|hediyyelik|gift|yumurta|surpriz|surprise|oyuncaq|oyuncaqli|toy|kinder|advent|dest|banka)\b/.test(f)) return 'ed';
+  if (/\bceki\b|\bcekili\b|\bkilo/.test(f)) return 'kq';
+  const m = f.match(/(\d+(?:[.,]\d+)?)\s*(k[qg]|qr|gr|q|g)\b/);
+  if (/\bk[qg]\b/.test(f) && (!m || (/^k/.test(m[2]) && parseFloat(m[1].replace(',', '.')) === 1))) return 'kq';
+  return m && !strongOnly ? 'ed' : null;
+}
 function pathModel(catId){
-  const groups = new Map();
+  const groups = new Map(), seen = [];
   for (const p of S.products) {
     if (p.catId !== catId || pathOf(p).length < 2 || (p.src && p.src !== 'araz' && !p.pathManual)) continue;
     const key = pathOf(p).join(' › ');
     let g = groups.get(key);
-    if (!g) { g = {path: pathOf(p), n: 0, cnt: new Map(), head: new Set(toksOf(pathOf(p)[1] || '')), tail: new Set(toksOf(pathOf(p).slice(2).join(' ')))}; groups.set(key, g); }
+    if (!g) { g = {key, path: pathOf(p), n: 0, cnt: new Map(), head: new Set(toksOf(pathOf(p)[1] || '')), tail: new Set(toksOf(pathOf(p).slice(2).join(' ')))}; groups.set(key, g); }
     g.n++; for (const t of toksOf(p.name)) g.cnt.set(t, (g.cnt.get(t) || 0) + 1);
+    const v = vecsOf(p)[0]; if (v) seen.push({id: p.id, v, g});
   }
   const df = new Map(); for (const g of groups.values()) for (const t of new Set([...g.cnt.keys(), ...g.head, ...g.tail])) df.set(t, (df.get(t) || 0) + 1);
-  return {groups: [...groups.values()], idf: t => Math.log(1 + groups.size / (1 + (df.get(t) || 0)))};
+  return {groups: [...groups.values()], seen, idf: t => Math.log(1 + groups.size / (1 + (df.get(t) || 0)))};
 }
-function guessPath(p, model){
-  const kg = p.unit === 'kq', toks = toksOf(p.name);
-  const named = g => toks.some(t => g.head.has(t) || g.tail.has(t));
-  let best = null, other = null;
-  for (const g of model.groups) {
-    const sameUnit = (g.path[0] === 'Şirniyyat çəki') === kg || g.path[0] === 'Səhər yeməkləri';
-    if (!sameUnit && !named(g)) continue;
+const namedBy = (g, t) => g.head.has(t) || g.tail.has(t);
+const topOk = (g, kind) => g.path[0] === (kind === 'kq' ? TOP_KG : TOP_ED) || (g.path[0] !== TOP_KG && g.path[0] !== TOP_ED);
+/* share of the look-alike Araz products that sit in each branch */
+function lookShare(p, model){
+  const v = vecsOf(p)[0]; if (!v || !model.seen.length) return null;
+  const top = [];
+  for (const s of model.seen) {
+    if (s.id === p.id) continue;
+    const d = dot(v, s.v); if (d < 0.4) continue;
+    top.push([d, s.g]);
+  }
+  top.sort((a, b) => b[0] - a[0]); top.length = Math.min(top.length, 9);
+  if (top.length < 3) return null;
+  const share = new Map(), lvl1 = new Map(); let sum = 0;
+  for (const [d, g] of top) {
+    const w = d - 0.35, k1 = g.path.slice(0, 2).join(' › ');
+    share.set(g, (share.get(g) || 0) + w); lvl1.set(k1, (lvl1.get(k1) || 0) + w); sum += w;
+  }
+  for (const [g, w] of share) share.set(g, w / sum);
+  for (const [k, w] of lvl1) lvl1.set(k, w / sum);
+  /* how much a branch looks right: its own look-alikes and those of its parent branch */
+  return {of: g => g ? 0.4 * (share.get(g) || 0) + 0.6 * (lvl1.get(g.path.slice(0, 2).join(' › ')) || 0) : 0,
+    lvl1: path => lvl1.get(path.slice(0, 2).join(' › ')) || 0};
+}
+const LOOK_W = 3;
+/* the branch a product belongs on; null when nothing points anywhere */
+function classify(p, model){
+  const cur = pathOf(p), ws = wordsOf(p.name);
+  /* the name says how it is sold; else a price per kilo means it is weighed; else it stays where it is */
+  /* for Araz's own products only a box, a toy or a price per kilo overrules where Araz put them */
+  const kind = saleKind(p.name, !p.src || p.src === 'araz') || (p.unit === 'kq' ? 'kq' : cur[0] === TOP_KG ? 'kq' : 'ed');
+  let cands = model.groups.filter(g => topOk(g, kind));
+  if (!cands.length) return null;
+  /* the product word wins over a taste word: "Peçenye karovkalı" is a biscuit; a toy egg goes with
+     the toys, a box with the boxes, a chocolate karovka with the chocolates */
+  const typ = ws.filter(w => !w.mod).map(w => w.t), has = set => ws.some(w => set.has(w.t));
+  const leads = [];
+  if (has(TOY)) leads.push(TOY);
+  if (has(BOX)) leads.push(BOX);
+  /* "Şokolad ... vafli" stays a chocolate: the first product word decides */
+  const baked = typ.find(t => BAKED.has(t) || CHOC.has(t)); if (baked && BAKED.has(baked)) leads.push(new Set([baked]));
+  if (has(SOFT) && has(CHOC)) leads.push(CHOC);
+  /* box and toy branches take only boxes and toys */
+  /* (unless the brand is one that branch is full of: Raffaello, Ferrero, Kinder) */
+  const kin = g => ws.some(w => (g.cnt.get(w.t) || 0) >= 2 || ((g.cnt.get(w.t) || 0) >= 1 && model.idf(w.t) >= 2));
+  for (const set of [BOX, TOY]) if (!has(set)) { const rest = cands.filter(g => kin(g) || ![...set].some(t => namedBy(g, t))); if (rest.length) cands = rest; }
+  let lead = null;
+  for (const set of leads) {
+    const named = cands.filter(g => [...set].some(t => namedBy(g, t)));
+    if (named.length) { cands = named; lead = set; break; }
+  }
+  const look = lookShare(p, model);
+  let best = null;
+  for (const g of cands) {
     let s = 0;
-    for (const t of toks) {
-      const w = model.idf(t);
-      if (g.head.has(t)) s += 3 * w; else if (g.tail.has(t)) s += 1.5 * w;
+    for (const {t, mod} of ws) {
+      const w = model.idf(t), k = mod ? 0.35 : 1;
+      if (g.head.has(t)) s += 3 * w * k; else if (g.tail.has(t)) s += 1.5 * w * k;
       const c = g.cnt.get(t) || 0; if (c) s += w * Math.min(1, c / 3);
     }
-    if (sameUnit) { if (!best || s > best.s) best = {g, s}; }
-    else if (!other || s > other.s) other = {g, s};
+    const l = look ? look.of(g) : 0;
+    s += LOOK_W * l;
+    if (!best || s > best.s) best = {g, s, l};
   }
-  /* a packet of "Korovka" goes to the Karovka branch even when Araz keeps that branch only by weight */
-  if (other && other.s >= 2 && !(best && named(best.g))) best = other;
-  return best && best.s >= 2 ? best.g.path : null;
+  return {kind, lead, look, best: best && (best.s >= 2 || lead) ? best : null, cands};
 }
-function repathChanges(){
+async function repathChanges(){
   const changes = [];
   for (const c of S.cats) {
     const model = pathModel(c.id); if (!model.groups.length) continue;
-    for (const p of S.products) {
+    const byKey = new Map(model.groups.map(g => [g.key, g]));
+    let i = 0;
+    for (const p of [...S.products]) {
+      if (++i % 10 === 0) await sleep(0);   // keep the screen responsive while photos are compared
       if (p.catId !== c.id || p.pathManual) continue;
-      const np = guessPath(p, model); if (!np || np.join('›') === pathOf(p).join('›')) continue;
-      if (!p.src || p.src === 'araz') {
-        /* Araz filed it itself: move only when the new branch is named after the product
-           (a "Korovka" in a chocolate branch) and the current branch's names share no word with it */
-        const toks = new Set(toksOf(p.name)), cur = pathOf(p);
-        const named = toksOf(np.slice(1).join(' ')).some(t => toks.has(t));
-        const curNamed = toksOf(cur.slice(1).join(' ')).some(t => toks.has(t));
-        if (!named || curNamed) continue;
+      const cur = pathOf(p), r = classify(p, model); if (!r) continue;
+      const wantTop = r.kind === 'kq' ? TOP_KG : TOP_ED;
+      const topWrong = (cur[0] === TOP_KG || cur[0] === TOP_ED || !cur.length) && cur[0] !== wantTop;
+      let np = r.best ? r.best.g.path : null;
+      if (!np && topWrong) {
+        /* no branch fits by name: the same kind of branch on the right side, else the top alone */
+        const swap = (cur[1] || '').replace(/ çəki$/, '').replace(/ ədəd$/, '') + (r.kind === 'kq' ? ' çəki' : ' ədəd');
+        const g = model.groups.find(g => g.path[0] === wantTop && g.path[1] === swap);
+        np = g ? g.path.slice(0, 2) : [wantTop];
       }
-      changes.push([p.id, np]);
+      if (!np || np.join('›') === cur.join('›')) continue;
+      if (!p.src || p.src === 'araz') {
+        /* Araz filed it itself: move it only on clear evidence */
+        const ws = wordsOf(p.name), toks = new Set(ws.map(w => w.t)), typ = new Set(ws.filter(w => !w.mod).map(w => w.t));
+        const curG = byKey.get(cur.join(' › ')), newG = r.best ? r.best.g : null;
+        const curNamed = toksOf(cur.slice(1).join(' ')).some(t => typ.has(t));
+        const newNamed = newG && toksOf(np.slice(1).join(' ')).some(t => toks.has(t));
+        /* a biscuit or a chocolate karovka sitting in a karovka/iris branch, or in a branch that names nothing it is */
+        const curSoft = curG && [...SOFT].some(t => namedBy(curG, t));
+        const leadMiss = r.lead && !(curG && [...r.lead].some(t => namedBy(curG, t))) && (curSoft || !curNamed || r.lead === TOY || r.lead === BOX);
+        const lookMove = r.look && newG && r.look.lvl1(np) >= 0.6 && r.look.lvl1(cur) <= 0.25 && !curNamed;
+        if (!(topWrong || leadMiss || (newNamed && !curNamed) || lookMove)) continue;
+      }
+      const patch = {path: np};
+      const unitNow = np[0] === TOP_KG ? 'kq' : np[0] === TOP_ED ? 'ed' : null;
+      if (unitNow && unitNow !== (p.unit === 'kq' ? 'kq' : 'ed')) patch.unit = unitNow;
+      changes.push([p.id, patch]);
     }
   }
   return changes;
 }
 async function writePaths(changes, onStep){
   let done = 0;
-  for (let i = 0; i < changes.length; i += 20) {
-    await Promise.all(changes.slice(i, i + 20).map(([id, path]) => Store.patch('products', id, {path}).catch(() => {})));
-    done = Math.min(changes.length, i + 20); if (onStep) onStep(done);
+  const step = Store.patchMany ? 200 : 20;
+  for (let i = 0; i < changes.length; i += step) {
+    const part = changes.slice(i, i + step);
+    if (Store.patchMany) {
+      /* the local copy changes at once; the server's confirmation is not waited for, so no signal does not stall it */
+      const w = Store.patchMany('products', part);
+      bg(w); await Promise.race([w, sleep(1500)]);
+    } else await Promise.all(part.map(([id, patch]) => Store.patch('products', id, patch).catch(() => {})));
+    done = Math.min(changes.length, i + step); if (onStep) onStep(done);
   }
   return done;
 }
 /* the owner's app sorts the shop products into branches once by itself */
-const AUTO_PATH_V = 2;
+const AUTO_PATH_V = 3;
 let autoPathBusy = false;
 async function autoRepath(){
   if (DEMO || S.role !== 'owner' || autoPathBusy || !S.synced.products || !S.got.categories || !S.synced.settings) return;
   if ((S.settings.autoPathV || 0) >= AUTO_PATH_V) return;
   autoPathBusy = true;
   try {
-    const changes = repathChanges();
+    const changes = await repathChanges();
     const n = changes.length ? await writePaths(changes) : 0;
     saveSettings({autoPathV: AUTO_PATH_V});
     if (n) toast(`${n} məhsul alt kateqoriyalara yerləşdirildi`);
@@ -1173,8 +1286,21 @@ function bindMore(box){
   }
 }
 /* sub-category rows: Şirniyyat → Şirniyyat çəki → Karamel çəki → … ; plus "on sale" */
-function renderFilters(allCat){
+/* a row of chips being swiped is never redrawn under the finger: updates wait until it settles */
+let filterTouch = false, filterScrollAt = 0, filterWait = null;
+const filtersIdle = () => !filterTouch && Date.now() - filterScrollAt > 180;
+function filtersLater(){
+  if (filterWait) return;
+  filterWait = setTimeout(() => { filterWait = null; if (!filtersIdle()) { filtersLater(); return; } renderContent(); }, 200);
+}
+document.addEventListener('touchstart', e => { if (e.target.closest && e.target.closest('#filters')) filterTouch = true; }, {passive: true, capture: true});
+const filterUp = () => { if (filterTouch) { filterTouch = false; filterScrollAt = Math.max(filterScrollAt, Date.now() - 100); } };
+document.addEventListener('touchend', filterUp, {passive: true, capture: true});
+document.addEventListener('touchcancel', filterUp, {passive: true, capture: true});
+document.addEventListener('scroll', e => { if (e.target.classList && e.target.classList.contains('frow')) filterScrollAt = Date.now(); }, {passive: true, capture: true});
+function renderFilters(allCat, force){
   const f = $('#filters'); if (!f) return;
+  if (!force && !filtersIdle()) { filtersLater(); return; }
   const shopN = {}; for (const p of allCat) for (const k of storesOf(p)) shopN[k] = (shopN[k] || 0) + 1;
   const shops = Object.keys(shopN).sort((a, b) => STORES.findIndex(s => s.id === a) - STORES.findIndex(s => s.id === b));
   if (S.shop && !shopN[S.shop]) S.shop = null;
@@ -1199,14 +1325,26 @@ function renderFilters(allCat){
   }
   if (!hasPath && saleN) rows.push(`<div class="frow"><button class="fchip" data-sale-off aria-pressed="${!S.saleOnly}">Hamısı <b>${all.length}</b></button>
     <button class="fchip sale" data-sale aria-pressed="${S.saleOnly}">Endirimdə <b>${saleN}</b></button></div>`);
-  const keep = new Map($$('.frow', f).map(r => [r.dataset.key, r.scrollLeft]));
-  f.innerHTML = rows.join('');
-  $$('.frow', f).forEach(r => {
-    const on = $('.fchip[data-v][aria-pressed="true"]', r);
-    if (keep.has(r.dataset.key)) r.scrollLeft = keep.get(r.dataset.key);
-    else if (on && on.dataset.v) r.scrollLeft = Math.max(0, on.offsetLeft - 40);
-  });
-  $$('.fchip', f).forEach(b => b.onclick = () => {
+  /* rows are patched in place: a row that did not change keeps its element and its scroll */
+  const old = new Map($$(':scope > .frow', f).map(r => [r.dataset.key || r.className, r]));
+  let prev = null;
+  for (const html of rows) {
+    const fresh = el(html), key = fresh.dataset.key || fresh.className;
+    let r = old.get(key);
+    if (r) {
+      old.delete(key);
+      if (r._h !== html) { r._h = html; r.innerHTML = fresh.innerHTML; r.className = fresh.className; }
+    } else {
+      r = fresh; r._h = html;
+      requestAnimationFrame(() => { const on = $('.fchip[data-v][aria-pressed="true"]', r); if (on && on.dataset.v) r.scrollLeft = Math.max(0, on.offsetLeft - 40); });
+    }
+    const want = prev ? prev.nextElementSibling : f.firstElementChild;
+    if (r !== want) f.insertBefore(r, want);
+    prev = r;
+  }
+  for (const r of old.values()) r.remove();
+  f.onclick = e => {
+    const b = e.target.closest('.fchip'); if (!b || !f.contains(b)) return;
     if (b.hasAttribute('data-shop')) { S.shop = b.dataset.shop || null; S.sel = []; }
     else if (b.hasAttribute('data-sale')) S.saleOnly = !S.saleOnly;
     else if (b.hasAttribute('data-sale-off')) S.saleOnly = false;
@@ -1214,8 +1352,8 @@ function renderFilters(allCat){
       const lvl = +b.closest('.frow').dataset.lvl;
       S.sel = S.sel.slice(0, lvl); if (b.dataset.v) S.sel[lvl] = b.dataset.v;
     }
-    S.limit = PAGE; renderContent();
-  });
+    S.limit = PAGE; filterTouch = false; filterScrollAt = 0; renderContent();
+  };
 }
 function renderContent(){
   if (S.gate !== 'app') return;
@@ -1695,7 +1833,7 @@ function openOwnerSettings(){
     <section class="set-sec"><h3>Kateqoriyalar</h3><div class="cat-rows" id="s-cats"></div>
       <button class="btn ghost wide" id="s-addcat" style="margin-top:10px">${ICON.plus}Kateqoriya əlavə et</button></section>
     <section class="set-sec"><h3>Alt kateqoriyalar</h3>
-      <p class="store-state">Məhsulları adındakı sözlərə ən yaxın alt kateqoriyaya yerləşdirir. Əllə seçdiyiniz yerlərə toxunmur.</p>
+      <p class="store-state">Məhsulları necə satıldığına (çəki və ya ədəd), adındakı məhsul sözünə və şəklinə görə ən uyğun alt kateqoriyaya yerləşdirir. Əllə seçdiyiniz yerlərə toxunmur.</p>
       <button class="btn ghost wide" id="s-repath">Avtomatik yenidən böl</button></section>
     <section class="set-sec"><h3>Süni intellekt</h3><p class="store-state" id="s-ai">${aiText()}</p></section>
     <section class="set-sec"><h3>Hesab</h3>${accountBlock()}</section>
@@ -1757,10 +1895,11 @@ function openOwnerSettings(){
     toast('Kateqoriya əlavə olundu. Adını dəyişin.');
   };
   $('#s-repath', sheet).onclick = async () => {
-    const changes = repathChanges();
+    const btn0 = $('#s-repath', sheet); btn0.disabled = true; btn0.textContent = 'Yoxlanılır…';
+    let changes; try { changes = await repathChanges(); } finally { btn0.disabled = false; btn0.textContent = 'Avtomatik yenidən böl'; }
     if (!changes.length) { toast('Dəyişəcək məhsul yoxdur'); return; }
     const byId = new Map(S.products.map(p => [p.id, p]));
-    const sample = changes.slice(0, 5).map(([id, path]) => `• ${(byId.get(id) || {}).name} → ${path.slice(1).join(' › ')}`).join('\n');
+    const sample = changes.slice(0, 5).map(([id, patch]) => `• ${(byId.get(id) || {}).name} → ${patch.path.join(' › ')}`).join('\n');
     if (!await askConfirm(`${changes.length} məhsulun alt kateqoriyası dəyişəcək. Məsələn:\n${sample}\n\nDavam edilsin?`, 'Böl')) return;
     const btn = $('#s-repath', sheet); btn.disabled = true;
     const done = await writePaths(changes, n => { btn.textContent = `Yerləşdirilir… ${n}/${changes.length}`; });
@@ -1907,7 +2046,7 @@ function seedDemo(){
   for (const c of DEFAULT_CATS) LocalStore.put('categories', c.id, c);
   for (const p of SEED_PRODUCTS) LocalStore.put('products', p.id, {...p, createdAt: 1, updatedAt: 1});
 }
-window.__ky = {S, get Store(){ return Store; }, rankQuery, sigFromImage, verdict};
+window.__ky = {S, get Store(){ return Store; }, rankQuery, sigFromImage, verdict, encVec, saleKind, repathChanges};
 boot();
 
 </script>
