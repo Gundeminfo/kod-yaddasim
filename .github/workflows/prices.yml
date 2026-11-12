@@ -28,7 +28,7 @@ jobs:
         env:
           ONLY: ${{ github.event.inputs.only }}
         run: |
-          if [ -n "$ONLY" ]; then node collector/run.mjs --only "$ONLY"; else node collector/run.mjs; fi
+          if [ -n "$ONLY" ]; then node robot.mjs --only "$ONLY"; else node robot.mjs; fi
       - name: Yadda saxla
         run: |
           git config user.name "qiymet-robotu"
