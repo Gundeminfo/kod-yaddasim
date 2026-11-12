@@ -267,9 +267,13 @@ textarea.inp{height:110px;padding:10px 14px;resize:vertical;font-size:13px}
 .mem-add{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .mem-add .row .inp{flex:1}
 .mem-list{display:flex;flex-direction:column;gap:8px}
-.mem-row{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 12px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
-.mem-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.mem-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 8px;padding:8px 8px 8px 12px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.mem-row .mem-mail{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.mem-perm{grid-column:1/-1;display:flex;align-items:center;gap:10px}
 .mem-row select.inp{width:auto;height:40px;padding:0 8px;font-size:14px}
+.mem-ana{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 4px;font-size:14px;font-weight:600;white-space:nowrap;cursor:pointer}
+.mem-ana input{width:20px;height:20px;margin:0;accent-color:var(--accent)}
+.mem-add .row{align-items:center}
 .mem-row .sq-btn{width:40px;height:40px;color:var(--danger)}
 .acct small{color:var(--muted);font-size:12px}
 .det-by{margin:12px 0 0;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
@@ -666,12 +670,15 @@ const S = {
   sel: [], saleOnly: false, shop: null, limit: PAGE,   // category filters: chosen sub-category path, sale only, cards shown
   ai: 'loading',   // loading | ready | error
   role: null,      // owner | editor | viewer
+  analiz: false,   // a member the owner allowed to see Analiz
   members: [],
 };
 const can = {
   edit: () => S.role === 'owner' || S.role === 'editor',
   del: () => S.role === 'owner',
   admin: () => S.role === 'owner',
+  /* the Analiz page and price history: the owner, and the people he ticks in Ayarlar */
+  analiz: () => S.role === 'owner' || (!!S.role && S.analiz === true),
 };
 const myEmail = () => String(S.user && S.user.email || '').trim().toLowerCase();
 try { const t = localStorage.getItem('ky-theme'); if (t) S.settings.theme = t; const n = localStorage.getItem('ky-title'); if (n) S.settings.title = n; } catch (e) {}
@@ -1162,7 +1169,7 @@ function searchProducts(q, catId, sel = [], saleOnly = false, shop = null){
 /* ================= views ================= */
 function parseHash(){
   const h = decodeURIComponent(location.hash.slice(1));
-  return h.startsWith('c-') ? {name: 'cat', id: h.slice(2)} : h === 'analiz' ? {name: 'analiz'} : {name: 'home'};
+  return h.startsWith('c-') ? {name: 'cat', id: h.slice(2)} : h === 'analiz' && can.analiz() ? {name: 'analiz'} : {name: 'home'};
 }
 function route(){
   const prev = S.route, next = parseHash();
@@ -1257,7 +1264,7 @@ function renderShell(){
       <header>
         <div class="hero-top">
           <p class="hello">${owner ? `Salam, <b>${esc(owner)}</b>` : 'Salam'}</p>
-          <span class="hero-btns"><a class="icon-btn" id="btn-analiz" href="#analiz" aria-label="Analiz">${ICON.chart}</a>
+          <span class="hero-btns">${can.analiz() ? `<a class="icon-btn" id="btn-analiz" href="#analiz" aria-label="Analiz">${ICON.chart}</a>` : ''}
           <button class="icon-btn" id="btn-settings" aria-label="Ayarlar">${ICON.gear}</button></span>
         </div>
         <h1 class="title">${esc(S.settings.title || APP_NAME)}</h1>
@@ -1538,7 +1545,7 @@ function openDetail(p, opts = {}){
         <span class="num ${!code && storeCode ? 'sku' : ''}">${code ? esc(code) : storeCode ? esc(storeCode) : '—'}</span></div>
         ${copyVal ? `<button class="sq-btn" id="d-copy" aria-label="Kodu kopyala">${ICON.copy}</button>` : ''}</div>
       ${priceTable(cur)}
-      <button class="btn ghost wide hist-btn" id="d-hist">${ICON.chart}Qiymət tarixçəsi</button>
+      ${can.analiz() ? `<button class="btn ghost wide hist-btn" id="d-hist">${ICON.chart}Qiymət tarixçəsi</button>` : ''}
       ${cur.createdBy ? `<p class="det-by">Əlavə edən: ${esc(cur.createdBy)}${cur.updatedBy && cur.updatedBy !== cur.createdBy ? `, son düzəliş: ${esc(cur.updatedBy)}` : ''}</p>` : ''}
       ${can.edit() ? `<div class="det-actions">
         <button class="btn ghost" id="d-edit">${ICON.edit}Düzəlt</button>
@@ -1558,7 +1565,8 @@ function openDetail(p, opts = {}){
     if (oldPhoto) $('.det-photo', sheet).replaceWith(oldPhoto);
     const cp = $('#d-copy', sheet);
     if (cp) cp.onclick = async () => toast(await copyText(copyVal) ? 'Kod kopyalandı' : 'Kopyalamaq olmadı');
-    $('#d-hist', sheet).onclick = () => openHistory(cur, cur.id);
+    const hb = $('#d-hist', sheet);
+    if (hb) hb.onclick = () => openHistory(cur, cur.id);
     const pe = $('#d-prices-edit', sheet);
     if (pe) pe.onclick = () => swapTop(buildForm(cur, {focusPrices: true}));
     if ($('#d-edit', sheet)) $('#d-edit', sheet).onclick = () => swapTop(buildForm(cur));
@@ -1905,11 +1913,12 @@ function openOwnerSettings(){
     <div class="field" style="margin-top:12px"><label for="s-title">Proqramın adı</label><input class="inp" id="s-title" value="${esc(S.settings.title || '')}" autocomplete="off"></div>
     <section class="set-sec"><h3>Rəng</h3>${themeChips(S.settings.theme || 'nar')}</section>
     <section class="set-sec"><h3>İstifadəçilər</h3>
-      <p class="store-state">Siyahıdakı şəxslər proqrama daxil ola bilər. Siyahıdan silinən şəxsin girişi dərhal bağlanır.</p>
+      <p class="store-state">Siyahıdakı şəxslər proqrama daxil ola bilər. Siyahıdan silinən şəxsin girişi dərhal bağlanır. Analiz bölməsini və qiymət tarixçəsini yalnız «Analiz» seçilən şəxslər görür.</p>
       <form class="mem-add" id="s-memform" novalidate>
         <input class="inp" id="s-mememail" type="email" placeholder="E-poçt, məs. test1@mehsulbazasi.az" autocomplete="off" autocapitalize="none" spellcheck="false">
         <div class="row"><select class="inp" id="s-memrole"><option value="editor">Əlavə edə bilər</option><option value="viewer">Yalnız baxır</option></select>
           <button class="btn" type="submit">Əlavə et</button></div>
+        <label class="mem-ana"><input type="checkbox" id="s-memana">Analiz bölməsini görsün</label>
       </form>
       <div class="mem-list" id="s-memlist"></div></section>
     <section class="set-sec"><h3>Kateqoriyalar</h3><div class="cat-rows" id="s-cats"></div>
@@ -1929,13 +1938,15 @@ function openOwnerSettings(){
   const drawMembers = () => {
     if (memList.contains(document.activeElement)) return;
     const ms = S.members.slice().sort((a, b) => collator.compare(a.id, b.id));
-    memList.innerHTML = ms.length ? ms.map(m => `<div class="mem-row" data-id="${esc(m.id)}"><span>${esc(m.id)}</span>
-        <select class="inp" aria-label="İcazə"><option value="editor" ${m.role !== 'viewer' ? 'selected' : ''}>Əlavə edə bilər</option><option value="viewer" ${m.role === 'viewer' ? 'selected' : ''}>Yalnız baxır</option></select>
-        <button class="sq-btn" aria-label="${esc(m.id)} sil">${ICON.trash}</button></div>`).join('')
+    memList.innerHTML = ms.length ? ms.map(m => `<div class="mem-row" data-id="${esc(m.id)}"><span class="mem-mail">${esc(m.id)}</span>
+        <button class="sq-btn" aria-label="${esc(m.id)} sil">${ICON.trash}</button>
+        <div class="mem-perm"><select class="inp" aria-label="İcazə"><option value="editor" ${m.role !== 'viewer' ? 'selected' : ''}>Əlavə edə bilər</option><option value="viewer" ${m.role === 'viewer' ? 'selected' : ''}>Yalnız baxır</option></select>
+        <label class="mem-ana"><input type="checkbox" ${m.analiz === true ? 'checked' : ''}>Analiz</label></div></div>`).join('')
       : '<p class="store-state">Hələ heç kim əlavə olunmayıb.</p>';
     $$('.mem-row', memList).forEach(r => {
       const id = r.dataset.id;
       $('select', r).addEventListener('change', e => bg(Store.patch('members', id, {role: e.target.value})));
+      $('.mem-ana input', r).addEventListener('change', e => { bg(Store.patch('members', id, {analiz: e.target.checked})); toast(e.target.checked ? 'Analiz açıldı' : 'Analiz bağlandı'); });
       $('.sq-btn', r).onclick = async () => {
         if (await askConfirm(`«${id}» siyahıdan silinsin? Girişi dərhal bağlanacaq.`, 'Sil', true)) { bg(Store.remove('members', id)); toast('Silindi'); }
       };
@@ -1947,8 +1958,8 @@ function openOwnerSettings(){
     const inp = $('#s-mememail', sheet), email = inp.value.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('E-poçtu düzgün yazın'); inp.focus(); return; }
     if (email === OWNER_EMAIL) { toast('Bu, sizin öz hesabınızdır'); return; }
-    bg(Store.put('members', email, {role: $('#s-memrole', sheet).value, addedAt: Date.now()}));
-    inp.value = ''; toast('Əlavə olundu');
+    bg(Store.put('members', email, {role: $('#s-memrole', sheet).value, analiz: $('#s-memana', sheet).checked, addedAt: Date.now()}));
+    inp.value = ''; $('#s-memana', sheet).checked = false; toast('Əlavə olundu');
   });
   const rows = $('#s-cats', sheet);
   const drawCats = () => {
@@ -2014,7 +2025,7 @@ function stopData(){ unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs 
 function stopMember(){ if (memberUnsub) { try { memberUnsub(); } catch (e) {} memberUnsub = null; } }
 /* decide who this person is: the owner, someone on the list, or nobody */
 function onUser(user){
-  stopData(); stopMember(); S.user = user; S.role = null;
+  stopData(); stopMember(); S.user = user; S.role = null; S.analiz = false;
   if (!user) { S.gate = 'login'; renderShell(); return; }
   S.gateMsg = '';
   const email = myEmail();
@@ -2023,16 +2034,23 @@ function onUser(user){
   memberUnsub = Store.watchDoc('members', email, (m, meta) => {
     if (!m) {
       if (meta && meta.fromCache) return;            // wait for the server's answer
-      S.role = null; stopData(); S.gate = 'denied'; renderShell(); return;
+      S.role = null; S.analiz = false; stopData(); S.gate = 'denied'; renderShell(); return;
     }
-    const role = m.role === 'viewer' ? 'viewer' : 'editor';
-    const changed = S.role !== role; S.role = role;
-    if (S.gate !== 'app') startData(); else if (changed) { renderShell(); dataChanged(); }
-  }, () => { S.role = null; stopData(); S.gate = 'denied'; renderShell(); });
+    const role = m.role === 'viewer' ? 'viewer' : 'editor', ana = m.analiz === true;
+    const changed = S.role !== role || S.analiz !== ana; S.role = role; S.analiz = ana;
+    if (S.gate !== 'app') startData(); else if (changed) { recheckRoute(); renderShell(); dataChanged(); }
+  }, () => { S.role = null; S.analiz = false; stopData(); S.gate = 'denied'; renderShell(); });
+}
+/* who may see what can change while the app is open: leave a page that is no longer allowed */
+function recheckRoute(){
+  if (!can.analiz()) while (stack.length && stack[stack.length - 1]._hist) closeTop();
+  const next = parseHash();
+  if (S.route.name === next.name) return;
+  S.route = next;
 }
 function startData(){
   stopData();
-  S.gate = 'app'; renderShell();
+  S.gate = 'app'; S.route = parseHash(); renderShell();
   const onErr = e => {
     const code = String(e && e.code || '');
     if (code.includes('permission-denied')) { S.gate = 'denied'; stopData(); renderShell(); return; }
@@ -2356,7 +2374,12 @@ const heatOf = pct => (HEAT.find(([lim]) => pct < lim) || HEAT[HEAT.length - 1])
 /* ---------- the Analiz page ---------- */
 const ANA = {period: '3m', from: null, to: null, stores: null, path: '', q: '', open: null};
 let anaKey = '', anaBusy = false, anaAgain = false;
+/* the period asked for, cut to the days the robot has data for */
 function anaRange(){
+  const [a, b] = periodRange();
+  return histStart != null && a < histStart ? [Math.min(histStart, b), b] : [a, b];
+}
+function periodRange(){
   const t = todayNo(), d = dDate(t), y = d.getUTCFullYear(), m = d.getUTCMonth() + 1;
   const first = histStart || t;
   switch (ANA.period) {
@@ -2425,6 +2448,8 @@ async function renderAnaliz(force){
   if (S.route.name !== 'analiz' || !$('#content')) return;
   const meta = $('#meta'); if (meta) meta.textContent = robotLine();
   if (!$('#ana-filters').childElementCount) renderAnalizFilters();
+  if (histStart == null) await loadHistIndex();
+  if (S.route.name !== 'analiz' || !$('#content')) return;
   const [a, b] = anaRange(), months = monthsBetween(a, b);
   const key = [a, b, ANA.stores ? [...ANA.stores].join(',') : '', ANA.path, ANA.q, LIVE.v, S.products.length].join('|');
   if (!force && key === anaKey && $('#content').childElementCount) return;
@@ -2551,10 +2576,11 @@ function bindAnaliz(box){
 }
 /* one product's prices in every shop over time, and its sale runs */
 async function openHistory(p, key){
+  if (!can.analiz()) return;
   const node = el(`<div class="overlay"><div class="scrim"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Qiymət tarixçəsi"></div></div>`);
   const sheet = node.querySelector('.sheet');
   sheet.innerHTML = `<div class="grab"></div><div class="sheet-bar"><span></span><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div><div class="loading">Yüklənir…</div>`;
-  pushOverlay(node);
+  node._hist = true; pushOverlay(node);
   const t = todayNo(), a = Math.max(histStart || t - 179, t - 364), months = monthsBetween(a, t);
   await loadHist(months);
   const {items, last} = timelines(months, null);
@@ -2592,6 +2618,7 @@ async function boot(){
   if (DEMO) {
     await LocalStore.init(); Store = LocalStore; seedDemo();
     S.role = ['owner', 'editor', 'viewer'].includes(DEMO_ROLE) ? DEMO_ROLE : 'owner';
+    S.analiz = new URLSearchParams(location.search).get('analiz') === '1';
     startData(); return;
   }
   try { await loadFirebase(); }
