@@ -335,6 +335,8 @@ textarea.inp{height:110px;padding:10px 14px;resize:vertical;font-size:13px}
 .ph img.ext,.det-photo img.ext{object-fit:contain;padding:6%}
 .ph img.ext.lowres{padding:18%}
 .det-photo img.ext.lowres{padding:20%}
+
+.dialog p{white-space:pre-line}
 </style>
 </head>
 <body>
@@ -541,9 +543,14 @@ async function loadFirebase(){
   FBX = {appM, authM, fsM, app, auth, db};
   Store = {
     mode: 'firebase',
-    subscribe(col, cb, onErr){
-      return fsM.onSnapshot(fsM.collection(db, col),
-        s => cb(s.docs.map(d => ({...d.data(), id: d.id})), {fromCache: s.metadata.fromCache}),
+    subscribe(col, cb, onErr, opts){
+      /* opts.sync: also hear the moment the cached copy is confirmed by the server */
+      let first = true;
+      return fsM.onSnapshot(fsM.collection(db, col), {includeMetadataChanges: !!(opts && opts.sync)},
+        s => {
+          const onlyMeta = !first && s.docChanges().length === 0; first = false;
+          cb(s.docs.map(d => ({...d.data(), id: d.id})), {fromCache: s.metadata.fromCache, onlyMeta});
+        },
         e => onErr && onErr(e));
     },
     put(col, id, data){ const b = {...data}; delete b.id; return fsM.setDoc(fsM.doc(db, col, id), b); },
@@ -574,7 +581,7 @@ function writeError(e){
 const S = {
   gate: 'loading', gateMsg: '', user: null,
   cats: [], products: [], settings: {...DEFAULT_SETTINGS},
-  got: {categories: false, products: false, settings: false}, synced: {categories: false, settings: false},
+  got: {categories: false, products: false, settings: false}, synced: {categories: false, products: false, settings: false},
   hasSettingsDoc: false,
   route: {name: 'home'}, cameFromHome: false, homeScroll: 0, q: '',
   sel: [], saleOnly: false, shop: null, limit: PAGE,   // category filters: chosen sub-category path, sale only, cards shown
@@ -863,6 +870,84 @@ async function backfill(){
 }
 
 /* ================= search ================= */
+/* ---------- sub-categories for products from other shops ----------
+   Araz files its own products in a tree (Şirniyyat çəki › Karovka çəki › Karovka klassik).
+   A product from another shop is put on the branch whose names and whose Araz products
+   share the most words with it; words of the branch names count most. */
+const TOK_STOP = new Set(['ceki', 'eded', 'kq', 'kg', 'qr', 'gr', 'sade', 'diger', 'ile', 'li', 'lu', 'assor', 'mix', 'yeni', 'mini', 'klassi']);
+const translit = s => norm(s).replace(/sh/g, 's').replace(/ch/g, 'c').replace(/zh/g, 'j').replace(/kh/g, 'x').replace(/w/g, 'v');
+const stem = t => { t = t.replace(/^korov/, 'karov').replace(/^shok|^chok|^cok|^chocol|^cikol/, 'sokol').replace(/^pechen|^pecen/, 'pecen').replace(/^vafl|^wafl|^wafer/, 'vafli').replace(/^gofr/, 'vafli');
+  return t.length > 6 ? t.slice(0, 6) : t; };
+const toksOf = s => [...new Set(translit(s).replace(/[^a-z0-9 ]+/g, ' ').split(' ').filter(w => w.length >= 3 && !/^\d/.test(w)).map(stem).filter(t => !TOK_STOP.has(t)))];
+function pathModel(catId){
+  const groups = new Map();
+  for (const p of S.products) {
+    if (p.catId !== catId || pathOf(p).length < 2 || (p.src && p.src !== 'araz' && !p.pathManual)) continue;
+    const key = pathOf(p).join(' › ');
+    let g = groups.get(key);
+    if (!g) { g = {path: pathOf(p), n: 0, cnt: new Map(), head: new Set(toksOf(pathOf(p)[1] || '')), tail: new Set(toksOf(pathOf(p).slice(2).join(' ')))}; groups.set(key, g); }
+    g.n++; for (const t of toksOf(p.name)) g.cnt.set(t, (g.cnt.get(t) || 0) + 1);
+  }
+  const df = new Map(); for (const g of groups.values()) for (const t of new Set([...g.cnt.keys(), ...g.head, ...g.tail])) df.set(t, (df.get(t) || 0) + 1);
+  return {groups: [...groups.values()], idf: t => Math.log(1 + groups.size / (1 + (df.get(t) || 0)))};
+}
+function guessPath(p, model){
+  const kg = p.unit === 'kq', toks = toksOf(p.name);
+  let best = null;
+  for (const g of model.groups) {
+    if ((g.path[0] === 'Şirniyyat çəki') !== kg && g.path[0] !== 'Səhər yeməkləri') continue;
+    let s = 0;
+    for (const t of toks) {
+      const w = model.idf(t);
+      if (g.head.has(t)) s += 3 * w; else if (g.tail.has(t)) s += 1.5 * w;
+      const c = g.cnt.get(t) || 0; if (c) s += w * Math.min(1, c / 3);
+    }
+    if (!best || s > best.s) best = {g, s};
+  }
+  return best && best.s >= 2 ? best.g.path : null;
+}
+function repathChanges(){
+  const changes = [];
+  for (const c of S.cats) {
+    const model = pathModel(c.id); if (!model.groups.length) continue;
+    for (const p of S.products) {
+      if (p.catId !== c.id || p.pathManual) continue;
+      const np = guessPath(p, model); if (!np || np.join('›') === pathOf(p).join('›')) continue;
+      if (!p.src || p.src === 'araz') {
+        /* Araz filed it itself: move only when the new branch is named after the product
+           (a "Korovka" in a chocolate branch) and the current branch's names share no word with it */
+        const toks = new Set(toksOf(p.name)), cur = pathOf(p);
+        const named = toksOf(np.slice(1).join(' ')).some(t => toks.has(t));
+        const curNamed = toksOf(cur.slice(1).join(' ')).some(t => toks.has(t));
+        if (!named || curNamed) continue;
+      }
+      changes.push([p.id, np]);
+    }
+  }
+  return changes;
+}
+async function writePaths(changes, onStep){
+  let done = 0;
+  for (let i = 0; i < changes.length; i += 20) {
+    await Promise.all(changes.slice(i, i + 20).map(([id, path]) => Store.patch('products', id, {path}).catch(() => {})));
+    done = Math.min(changes.length, i + 20); if (onStep) onStep(done);
+  }
+  return done;
+}
+/* the owner's app sorts the shop products into branches once by itself */
+const AUTO_PATH_V = 1;
+let autoPathBusy = false;
+async function autoRepath(){
+  if (DEMO || S.role !== 'owner' || autoPathBusy || !S.synced.products || !S.got.categories || !S.synced.settings) return;
+  if ((S.settings.autoPathV || 0) >= AUTO_PATH_V) return;
+  autoPathBusy = true;
+  try {
+    const changes = repathChanges();
+    const n = changes.length ? await writePaths(changes) : 0;
+    saveSettings({autoPathV: AUTO_PATH_V});
+    if (n) toast(`${n} məhsul alt kateqoriyalara yerləşdirildi`);
+  } finally { autoPathBusy = false; }
+}
 const nameKey = new Map();
 const normName = p => { const k = nameKey.get(p.id); if (k && k[0] === p.name) return k[1]; const n = norm(p.name); nameKey.set(p.id, [p.name, n]); return n; };
 const pathOf = p => Array.isArray(p.path) ? p.path : [];
@@ -1243,6 +1328,7 @@ function buildForm(p, prefill = {}){
         <p class="warn" id="w-name" hidden>Adı yazın.</p></div>
       <div class="field"><label for="f-cat">Kateqoriya</label>
         <select class="inp" id="f-cat">${S.cats.map(c => `<option value="${esc(c.id)}" ${c.id === d.catId ? 'selected' : ''}>${esc(c.emoji + ' ' + c.name)}</option>`).join('')}</select></div>
+      <div class="field" id="f-pathbox"><label for="f-path">Alt kateqoriya</label><select class="inp" id="f-path"></select></div>
       <div class="field" id="f-prices"><div class="lbl-row"><span class="flabel">Qiymətlər, ₼</span>
           <div class="seg" role="group" aria-label="Vahid">
             <button type="button" data-unit="kq" aria-pressed="${d.unit !== 'ed'}">kq</button>
@@ -1266,6 +1352,17 @@ function buildForm(p, prefill = {}){
       </div>
     </form>`;
   let photo = d.photo || '', unit = d.unit === 'ed' ? 'ed' : 'kq';
+  /* every branch already used in the chosen category, plus the product's own */
+  const drawPaths = () => {
+    const catId = $('#f-cat', sheet).value, cur = catId === d.catId ? pathOf(d).join(' › ') : '';
+    const keys = new Set(S.products.filter(p => p.catId === catId && pathOf(p).length).map(p => pathOf(p).join(' › ')));
+    if (cur) keys.add(cur);
+    const list = [...keys].sort(collator.compare);
+    $('#f-pathbox', sheet).hidden = !list.length;
+    $('#f-path', sheet).innerHTML = `<option value="">— seçilməyib —</option>` + list.map(k => `<option value="${esc(k)}" ${k === cur ? 'selected' : ''}>${esc(k)}</option>`).join('');
+  };
+  drawPaths();
+  $('#f-cat', sheet).addEventListener('change', drawPaths);
   const box = $('#f-photo', sheet);
   const drawPhoto = () => { box.innerHTML = photo ? `<img src="${esc(photo)}" alt="Məhsulun şəkli">` : ICON.camera; };
   drawPhoto();
@@ -1313,7 +1410,8 @@ function buildForm(p, prefill = {}){
       unit, code, photo, createdAt: (p && p.createdAt) || Date.now(), updatedAt: Date.now(),
       createdBy: (p && p.createdBy) || myEmail(), updatedBy: myEmail()};
     delete item.id;
-    if (p && p.catId !== item.catId) item.path = [];   // sub-categories belong to the old category
+    const chosen = $('#f-path', sheet).value, chosenPath = chosen ? chosen.split(' › ') : [];
+    if (chosenPath.join('›') !== pathOf(p || {}).join('›') || (p && p.catId !== item.catId)) { item.path = chosenPath; item.pathManual = true; }
     const samePhoto = p && p.photo === photo;
     item.sig = samePhoto && Array.isArray(p.sig) ? p.sig : null;
     item.emb = samePhoto && p.emb && p.embModel === MODEL_ID ? p.emb : null;
@@ -1544,6 +1642,9 @@ function openOwnerSettings(){
       <div class="mem-list" id="s-memlist"></div></section>
     <section class="set-sec"><h3>Kateqoriyalar</h3><div class="cat-rows" id="s-cats"></div>
       <button class="btn ghost wide" id="s-addcat" style="margin-top:10px">${ICON.plus}Kateqoriya əlavə et</button></section>
+    <section class="set-sec"><h3>Alt kateqoriyalar</h3>
+      <p class="store-state">Məhsulları adındakı sözlərə ən yaxın alt kateqoriyaya yerləşdirir. Əllə seçdiyiniz yerlərə toxunmur.</p>
+      <button class="btn ghost wide" id="s-repath">Avtomatik yenidən böl</button></section>
     <section class="set-sec"><h3>Süni intellekt</h3><p class="store-state" id="s-ai">${aiText()}</p></section>
     <section class="set-sec"><h3>Hesab</h3>${accountBlock()}</section>
     <section class="set-sec"><h3>Ehtiyat nüsxə</h3><div class="stack">
@@ -1603,6 +1704,16 @@ function openOwnerSettings(){
     bg(Store.put('categories', 'k' + uid(), {name: 'Yeni kateqoriya', emoji: '📦', tint: TINT_CYCLE[S.cats.length % TINT_CYCLE.length], order}));
     toast('Kateqoriya əlavə olundu. Adını dəyişin.');
   };
+  $('#s-repath', sheet).onclick = async () => {
+    const changes = repathChanges();
+    if (!changes.length) { toast('Dəyişəcək məhsul yoxdur'); return; }
+    const byId = new Map(S.products.map(p => [p.id, p]));
+    const sample = changes.slice(0, 5).map(([id, path]) => `• ${(byId.get(id) || {}).name} → ${path.slice(1).join(' › ')}`).join('\n');
+    if (!await askConfirm(`${changes.length} məhsulun alt kateqoriyası dəyişəcək. Məsələn:\n${sample}\n\nDavam edilsin?`, 'Böl')) return;
+    const btn = $('#s-repath', sheet); btn.disabled = true;
+    const done = await writePaths(changes, n => { btn.textContent = `Yerləşdirilir… ${n}/${changes.length}`; });
+    btn.disabled = false; btn.textContent = 'Avtomatik yenidən böl'; toast(`${done} məhsul yerləşdirildi`);
+  };
   $('#s-export', sheet).onclick = () => {
     const data = JSON.stringify({app: 'kod-yaddasim', v: 2, exportedAt: new Date().toISOString(), settings: S.settings, categories: S.cats,
       products: S.products.map(p => ({...p}))});
@@ -1626,7 +1737,7 @@ function openOwnerSettings(){
 
 /* ================= auth + data ================= */
 let unsubs = [], memberUnsub = null;
-function stopData(){ unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = []; S.got = {categories: false, products: false, settings: false}; S.synced = {categories: false, settings: false}; S.members = []; }
+function stopData(){ unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = []; S.got = {categories: false, products: false, settings: false}; S.synced = {categories: false, products: false, settings: false}; S.members = []; }
 function stopMember(){ if (memberUnsub) { try { memberUnsub(); } catch (e) {} memberUnsub = null; } }
 /* decide who this person is: the owner, someone on the list, or nobody */
 function onUser(user){
@@ -1660,9 +1771,14 @@ function startData(){
     maybeSeed();
     if (S.route.name === 'cat') renderShell(); else dataChanged();
   }, onErr));
-  unsubs.push(Store.subscribe('products', docs => { S.products = docs; S.got.products = true; dataChanged(); backfill(); }, onErr));
+  unsubs.push(Store.subscribe('products', (docs, meta) => {
+    if (!meta || !meta.fromCache) S.synced.products = true;
+    if (!(meta && meta.onlyMeta)) { S.products = docs; S.got.products = true; dataChanged(); backfill(); }
+    setTimeout(autoRepath, 2500);
+  }, onErr, {sync: true}));
   if (can.admin()) unsubs.push(Store.subscribe('members', docs => { S.members = docs; for (const f of live) f(); }, () => {}));
   unsubs.push(Store.subscribe('settings', (docs, meta) => {
+    if (meta && meta.onlyMeta) { if (!meta.fromCache && !S.synced.settings) { S.synced.settings = true; maybeSeed(); setTimeout(autoRepath, 2500); } return; }
     const s = docs.find(d => d.id === 'app');
     S.got.settings = true; if (!meta.fromCache) S.synced.settings = true;
     S.hasSettingsDoc = !!s;
@@ -1671,8 +1787,8 @@ function startData(){
       S.settings = {...DEFAULT_SETTINGS, ...s}; delete S.settings.id;
       if (JSON.stringify(S.settings) !== before) renderShell();
     }
-    maybeSeed();
-  }, onErr));
+    maybeSeed(); setTimeout(autoRepath, 2500);
+  }, onErr, {sync: true}));
 }
 /* first run on an empty database: categories + the two products from the old app */
 let seeded = false;
