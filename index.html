@@ -501,15 +501,21 @@ const money = v => (v == null || v === '' || isNaN(v)) ? null : Math.round(Numbe
 const storeName = id => (STORES.find(s => s.id === id) || {name: id}).name;
 /* every shop's saved price as {r: regular, s: sale or null}; older products kept one number in p.price.
    pricesOf (in the market section) adds the robot's latest prices on top */
+/* today as 2026-11-14, on the phone's own calendar */
+const todayIso = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 function basePrices(p){
-  const out = {};
+  const out = {}, today = todayIso();
   if (p.prices && typeof p.prices === 'object') {
     for (const [k, v] of Object.entries(p.prices)) {
       if (!v || typeof v !== 'object') continue;
       let r = money(v.r), s = money(v.s);
       if (r == null && s != null) { r = s; s = null; }
       if (r == null) continue;
-      out[k] = {...v, r, s: s != null && s < r ? s : null};
+      const row = {...v, r, s: s != null && s < r ? s : null};
+      /* a leaflet price holds only between its dates: before them and after them the shop sells at the regular price */
+      if (row.s != null && v.to && String(v.to).slice(0, 10) < today) { row.ended = v.to; row.s = null; }
+      else if (row.s != null && v.from && String(v.from).slice(0, 10) > today) { row.soon = v.from; row.s = null; }
+      out[k] = row;
     }
   }
   /* the oldest products kept one Araz price in p.price; newer ones keep p.price only as a copy of their first shop's price */
@@ -1528,7 +1534,8 @@ function priceTable(p){
   const rows = keys.map(k => ({k, ...ps[k]}))
     .sort((a, b) => nowPrice(a) - nowPrice(b) || collator.compare(storeName(a.k), storeName(b.k)));
   const best = nowPrice(rows[0]), several = rows.length > 1, u = UNIT_LABEL[p.unit] || 'kq', codes = codesOf(p);
-  const when = x => x.from || x.to ? [x.from, x.to].filter(Boolean).map(fmtDay).join(' – ') : x.at ? fmtDay(x.at) : '';
+  const when = x => x.ended ? `Endirim ${fmtDay(x.ended)} bitdi` : x.soon ? `Endirim ${fmtDay(x.soon)} başlayır`
+    : x.from || x.to ? [x.from, x.to].filter(Boolean).map(fmtDay).join(' – ') : x.at ? fmtDay(x.at) : '';
   return `<section class="det-prices">
     <div class="pt-head"><h3>Mağazalarda qiymət</h3>${can.edit() ? `<button class="link-btn" id="d-prices-edit">Dəyiş</button>` : ''}</div>
     <table class="pt"><thead><tr><th scope="col">Mağaza</th><th scope="col">Endirimsiz</th><th scope="col">Endirimli</th></tr></thead><tbody>
@@ -2202,7 +2209,7 @@ function liveItem(p, st){
   const cs = p.codes || {};
   if (cs[st] && L.byCode.get(String(cs[st]))) return L.byCode.get(String(cs[st]));
   if (p.id.startsWith(st + '-')) { const k = p.id.slice(st.length + 1), r = L.byId.get(k) || L.bySlug.get(k); if (r) return r; }
-  if (p.prices && p.prices[st]) { const r = L.bySlug.get(itemSlug(p.name)); if (r) return r; }
+  if (p.prices && p.prices[st]) { const r = L.bySlug.get(itemSlug(p.name)) || famFind(L, p.name); if (r) return r; }
   const bc = p.sku || cs.araz; if (bc && L.byCode.get(String(bc))) return L.byCode.get(String(bc));
   return null;
 }
@@ -2396,6 +2403,19 @@ function famJoin(groups){
   return groups.map((_, i) => find(i));
 }
 /*FAM-END*/
+/* the shop's listing for a card that was typed from a leaflet ("AXA Granola çeşidləri 330 q"): one listing with the same weight,
+   flavour and name words, or several of them at one price (the flavours of an assortment) */
+function famFind(L, name){
+  const n = norm(name), w = famWeight(n); if (w == null) return null;
+  const sig = famSig(n); if (!sig.core.length) return null;
+  if (!L.fam) { L.fam = new Map();
+    for (const it of L.byId.values()) { const m = norm(it.name), iw = famWeight(m); if (iw == null) continue; const sg = famSig(m); if (!sg.core.length) continue;
+      const k = iw === 0 ? 'kq' : Math.round(iw); (L.fam.get(k) || L.fam.set(k, []).get(k)).push({it, w: iw, sig: sg}); } }
+  const hits = [];
+  for (const k of w === 0 ? ['kq'] : [-1, 0, 1].map(d => Math.round(w) + d)) for (const x of L.fam.get(k) || [])
+    if ((w === 0 ? x.w === 0 : Math.abs(x.w - w) <= Math.max(0.6, 0.02 * Math.max(x.w, w))) && famSame(sig, x.sig)) hits.push(x.it);
+  return hits.length && hits.every(h => h.r === hits[0].r) ? hits[0] : null;
+}
 /* every listing's product family, worked out once for the history that is loaded */
 let famCache = {sig: ''};
 const famBaseKey = t => {
@@ -2858,7 +2878,7 @@ function seedDemo(){
   for (const c of DEFAULT_CATS) LocalStore.put('categories', c.id, c);
   for (const p of SEED_PRODUCTS) LocalStore.put('products', p.id, {...p, createdAt: 1, updatedAt: 1});
 }
-window.__ky = {S, get Store(){ return Store; }, rankQuery, sigFromImage, verdict, encVec, saleKind, repathChanges};
+window.__ky = {S, get Store(){ return Store; }, pricesOf: p => pricesOf(p), rankQuery, sigFromImage, verdict, encVec, saleKind, repathChanges};
 boot();
 
 </script>
