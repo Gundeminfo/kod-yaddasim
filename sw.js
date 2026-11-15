@@ -1,7 +1,8 @@
 /* Kod Yaddaşım: keeps the app shell available offline.
    The page itself is fetched from the network first so updates show up at once;
    Firebase, fonts and the AI model are left to the browser's own cache. */
-const CACHE = 'ky-shell-v1';
+/* v2: the new icon (barcode M) replaces the KY one */
+const CACHE = 'ky-shell-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
