@@ -2193,6 +2193,7 @@ async function loadLive(force){
     for (const [id, st] of Object.entries(j.stores || {})) if (!STORES.some(s => s.id === id)) STORES.push({id, name: st.name || id});
     LIVE.data = j; LIVE.idx = indexLive(j); LIVE.v++; anaKey = '';
     dataChanged();
+    setTimeout(relinkShops, 4000);
   } catch (e) {}
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) loadLive(); });
@@ -2855,6 +2856,49 @@ function openDuplicates(){
     sets.splice(+card.dataset.i, 1); draw();
   });
   setTimeout(() => { sets = findDuplicates(); draw(); }, 30);
+}
+
+/* ---------- prices copied in at import with no link to the shop's listing ----------
+   When the base was built, OBA's (and some Tamstore) prices were put on Araz cards by name, without saying which OBA listing they
+   came from, so the robot's daily price never reached those rows. The owner's app links them once: the OBA listing must have the
+   same weight and flavours, share a name word, and have had exactly the imported price on the robot's first day (or today).
+   Exactly one such listing, or nothing is written. */
+const RELINK_V = 1;
+let relinkBusy = false;
+async function relinkShops(tries = 0){
+  if (DEMO || S.role !== 'owner' || relinkBusy || !LIVE.idx) return;
+  if (!S.synced.products || !S.synced.settings) { if (tries < 20) setTimeout(() => relinkShops(tries + 1), 5000); return; }
+  if ((S.settings.relinkV || 0) >= RELINK_V) return;
+  relinkBusy = true;
+  try {
+    const todo = [];
+    for (const p of S.products) for (const st of Object.keys(p.prices || {}))
+      if (st !== 'araz' && LIVE.idx[st] && !(p.links && p.links[st]) && money((p.prices[st] || {}).r) != null && !liveItem(p, st)) todo.push([p, st]);
+    if (!todo.length) { saveSettings({relinkV: RELINK_V}); return; }
+    const idx = await loadHistIndex(), first = idx && idx.first ? String(idx.first).slice(0, 7) : null;
+    const firstR = new Map();
+    if (first) { await loadHist([first]); for (const t of timelines([first], null).items.values()) if (t.pts.length) firstR.set(t.key, t.pts[0][1]); }
+    const shop = new Map();
+    const listOf = st => { if (shop.has(st)) return shop.get(st); const out = [];
+      for (const it of LIVE.idx[st].byId.values()) { const n = norm(it.name), w = famWeight(n); if (w == null) continue; out.push({it, w, sig: famSig(n), r0: firstR.get(st + ':' + it.id)}); }
+      shop.set(st, out); return out; };
+    const sameW = (a, b) => a === 0 ? b === 0 : b !== 0 && Math.abs(a - b) <= Math.max(0.6, 0.02 * Math.max(a, b));
+    const byProduct = new Map(), taken = new Set();
+    for (const [p, st] of todo) {
+      const n = norm(p.name), w = famWeight(n); if (w == null) continue;
+      const sig = famSig(n); if (!sig.core.length) continue;
+      const cents = v => v == null ? null : Math.round(v * 100), want = cents(money(p.prices[st].r));
+      const hits = listOf(st).filter(x => sameW(w, x.w) && x.sig.fl === sig.fl && sig.core.some(a => x.sig.core.some(b => famWordEq(a, b)))
+        && (cents(x.r0) === want || cents(money(x.it.r)) === want));
+      if (hits.length !== 1 || taken.has(st + ':' + hits[0].it.id)) continue;
+      taken.add(st + ':' + hits[0].it.id);
+      const links = byProduct.get(p.id) || {...(p.links || {})}; links[st] = hits[0].it.id; byProduct.set(p.id, links);
+    }
+    const changes = [...byProduct].map(([id, links]) => [id, {links}]);
+    if (changes.length) await writePaths(changes);
+    saveSettings({relinkV: RELINK_V});
+    if (changes.length) toast(`${changes.length} məhsulun OBA və Tamstore qiyməti robota bağlandı`);
+  } finally { relinkBusy = false; }
 }
 
 /* ================= boot ================= */
