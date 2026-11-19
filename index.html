@@ -432,6 +432,11 @@ a.icon-btn{color:inherit;text-decoration:none}
 .dup-keep{align-self:flex-start;padding:1px 8px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:11px;font-style:normal;font-weight:700}
 .dup-acts{display:flex;justify-content:flex-end;gap:8px}
 .dup-acts .btn{height:40px;padding:0 14px}
+/* price history: one year at a time */
+.hist-years{margin:4px 0 2px}
+.hist-shops{display:flex;flex-wrap:wrap;gap:6px 14px;margin:2px 0 6px;font-size:14px;color:var(--ink)}
+.hist-shops span{display:inline-flex;align-items:center}
+.hist-days{display:block;font-size:12px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -2461,7 +2466,9 @@ function famOf(F, t){
 /* ---------- colours: one per shop, fixed order, never by rank ---------- */
 const storeSlot = id => { const i = STORES.findIndex(s => s.id === id); return i < 0 ? 8 : Math.min(i + 1, 8); };
 const storeVar = id => `var(--s${storeSlot(id)})`;
-const shopDot = id => `<i class="sdot" style="background:${storeVar(id)}" aria-hidden="true"></i>`;
+/* the palette has eight colours; shops past the eighth reuse the last one, drawn dashed so they still read apart */
+const storeDash = id => STORES.findIndex(s => s.id === id) >= 8;
+const shopDot = id => `<i class="sdot" style="${storeDash(id) ? `background:transparent;box-shadow:inset 0 0 0 2px ${storeVar(id)}` : `background:${storeVar(id)}`}" aria-hidden="true"></i>`;
 
 /* ---------- small SVG charts ---------- */
 const niceMax = v => { if (!(v > 0)) return 1; const e = Math.pow(10, Math.floor(Math.log10(v))), f = v / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; };
@@ -2485,9 +2492,9 @@ function lineChart(id, x, series, opt = {}){
     s.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + px(i).toFixed(1) + ' ' + py(v).toFixed(1); pen = true; });
     const lastI = s.vals.reduce((k, v, i) => v != null ? i : k, -1);
     const end = lastI >= 0 ? `<circle class="end" cx="${px(lastI)}" cy="${py(s.vals[lastI])}" r="4" style="fill:${storeVar(s.id)}"/>` : '';
-    return `<path class="ln" d="${d}" style="stroke:${storeVar(s.id)}"/>${end}`;
+    return `<path class="ln" d="${d}" style="stroke:${storeVar(s.id)}${storeDash(s.id) ? ';stroke-dasharray:6 4' : ''}"/>${end}`;
   }).join('');
-  const legend = series.length > 1 ? `<div class="legend">${series.map(s => `<span><i class="lkey" style="background:${storeVar(s.id)}"></i>${esc(s.name)}</span>`).join('')}</div>` : '';
+  const legend = series.length > 1 ? `<div class="legend">${series.map(s => `<span><i class="lkey" style="${storeDash(s.id) ? `background:transparent;box-shadow:inset 0 0 0 2px ${storeVar(s.id)}` : `background:${storeVar(s.id)}`}"></i>${esc(s.name)}</span>`).join('')}</div>` : '';
   CHARTS.set(id, {x, series, px, W, H, T, B, fmt: opt.tip || fmt});
   return `${legend}<div class="chart" data-chart="${id}"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(opt.label || '')}">${g}${lines}<line class="xhair" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/></svg><div class="tip" hidden></div></div>`;
 }
@@ -2590,9 +2597,9 @@ function robotLine(){
   const d = LIVE.data; if (!d) return 'Robotun məlumatı hələ yoxdur.';
   const when = new Date(d.at);
   const st = Object.entries(d.stores || {}).map(([id, s]) => `${storeName(id)} ${s.ok === false ? '✗' : '✓'}`).join(' · ');
-  const via = Object.entries(d.stores || {}).filter(([, s]) => s.via).map(([id]) => storeName(id));
+  const via = new Map(); for (const [id, s] of Object.entries(d.stores || {})) if (s.via) via.set(s.via, [...(via.get(s.via) || []), storeName(id)]);
   return `Son yoxlama: ${fmtDay(when)} ${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')} · ${st}`
-    + (via.length ? `. ${via.join(', ')} qiymətləri Wolt-dan götürülür.` : '');
+    + [...via].map(([v, names]) => `. ${names.join(', ')} qiymətləri ${v} saytından götürülür`).join('') + (via.size ? '.' : '');
 }
 async function renderAnaliz(force){
   if (S.route.name !== 'analiz' || !$('#content')) return;
@@ -2727,33 +2734,68 @@ async function openHistory(p, key){
   if (!can.analiz()) return;
   const node = el(`<div class="overlay"><div class="scrim"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Qiymət tarixçəsi"></div></div>`);
   const sheet = node.querySelector('.sheet');
-  sheet.innerHTML = `<div class="grab"></div><div class="sheet-bar"><span></span><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div><div class="loading">Yüklənir…</div>`;
+  const bar = `<div class="grab"></div><div class="sheet-bar"><span></span><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div>`;
+  sheet.innerHTML = bar + '<div class="loading">Yüklənir…</div>';
   node._hist = true; pushOverlay(node);
-  const t = todayNo(), a = Math.max(histStart || t - 179, t - 364), months = monthsBetween(a, t);
-  await loadHist(months);
-  const {items, last} = timelines(months, null);
-  const end = Math.min(t, last != null ? last : t);
-  const F = families(), fk = p ? (F.ofGk.get(p.id) || p.id) : key;
-  const mine = [...items.values()].filter(it => famOf(F, it)[0] === fk);
-  const name = p ? p.name : (F.info.get(fk) || {}).name || (mine[0] && mine[0].name) || '';
-  const bk = buckets(a, end);
-  const series = mine.map(it => {
-    const vals = bk.map(u => { let v = null; for (const [d, r, s] of it.pts) { if (d > u.b) break; v = r == null ? null : (s != null && s < r ? s : r); } return v; });
-    return {id: it.st, name: storeName(it.st) + (it.manual ? ' (əl ilə)' : ''), item: it.name, vals};
+  if (histStart == null) await loadHistIndex();
+  const t = todayNo(), start = histStart != null ? histStart : t - 179;
+  const y0 = dDate(start).getUTCFullYear(), y1 = dDate(t).getUTCFullYear();
+  const years = []; for (let y = y1; y >= y0; y--) years.push(y);
+  let pick = String(y1);
+  const draw = async () => {
+    /* one calendar year, or everything the robot has kept */
+    const a = pick === 'all' ? start : Math.max(start, dayNo(+pick, 1, 1));
+    const b = pick === 'all' ? t : Math.min(t, dayNo(+pick, 12, 31));
+    const months = monthsBetween(a, b);
+    await loadHist(months);
+    if (!node.isConnected) return;
+    const {items, last} = timelines(months, null);
+    const end = Math.min(b, last != null ? last : b);
+    const F = families(), fk = p ? (F.ofGk.get(p.id) || p.id) : key;
+    const mine = [...items.values()].filter(it => famOf(F, it)[0] === fk);
+    const name = p ? p.name : (F.info.get(fk) || {}).name || (mine[0] && mine[0].name) || '';
+    const bk = buckets(a, end);
+    const series = mine.map(it => {
+      const vals = bk.map(u => { let v = null; for (const [d, r, s] of it.pts) { if (d > u.b) break; v = r == null ? null : (s != null && s < r ? s : r); } return v; });
+      return {id: it.st, name: storeName(it.st) + (it.manual ? ' (əl ilə)' : ''), item: it.name, vals};
+    });
+    /* two listings in one shop: tell them apart by the shop's own name */
+    for (const s of series) if (series.filter(x => x.id === s.id).length > 1 && s.item) s.name += ' · ' + s.item;
+    const runs = mine.flatMap(it => itemStory(it, a, end).promos.map(x => ({...x, st: it.st}))).sort((x, y) => y.from - x.from);
+    /* the year in a few numbers: how often, how long, how deep, where */
+    const days = runs.reduce((n, x) => n + x.to - x.from + 1, 0);
+    const avg = runs.length ? Math.round(runs.reduce((n, x) => n + x.pct, 0) / runs.length) : 0;
+    const max = runs.reduce((m, x) => Math.max(m, x.pct), 0);
+    const per = new Map(); for (const x of runs) per.set(x.st, (per.get(x.st) || 0) + 1);
+    const shops = [...per].sort((x, y) => y[1] - x[1]);
+    const width = Math.min(680, sheet.clientWidth - 32 || 340);
+    sheet.innerHTML = bar + `
+      <h2 class="det-name">${esc(name)}</h2>
+      <div class="frow hist-years">${years.map(y => `<button class="fchip" data-year="${y}" aria-pressed="${pick === String(y)}">${y}</button>`).join('')}
+        ${years.length > 1 ? `<button class="fchip" data-year="all" aria-pressed="${pick === 'all'}">Hamısı</button>` : ''}</div>
+      <p class="sub">${fmtDayNo(a, true)} – ${fmtDayNo(end, true)}${a === start ? ` (robot qiymətləri ${fmtDayNo(start, true)} tarixindən yazır)` : ''}</p>
+      <div class="kpis hist-kpis">
+        <div class="kpi"><span>Endirimə düşüb</span><b>${runs.length} dəfə</b></div>
+        <div class="kpi"><span>Endirimdə olduğu gün</span><b>${days}</b></div>
+        <div class="kpi"><span>Orta endirim</span><b>${runs.length ? avg + '%' : '—'}</b></div>
+        <div class="kpi"><span>Ən böyük endirim</span><b>${runs.length ? max + '%' : '—'}</b></div>
+      </div>
+      ${shops.length ? `<p class="hist-shops">${shops.map(([st, n]) => `<span>${shopDot(st)}${esc(storeName(st))}: ${n} dəfə</span>`).join('')}</p>` : ''}
+      <h3 class="ana-h3">Endirimlər</h3>
+      ${runs.length ? `<table class="atable"><thead><tr><th>Mağaza</th><th>Tarix</th><th>Qiymət</th><th>Endirim</th></tr></thead><tbody>
+        ${runs.map(x => `<tr><td>${shopDot(x.st)}${esc(storeName(x.st))}</td><td>${fmtDayNo(x.from)}${x.to !== x.from ? ' – ' + fmtDayNo(x.to) : ''}<small class="hist-days">${x.to - x.from + 1} gün</small></td><td>${fmtPrice(x.s)} <s>${fmtPrice(x.r)}</s></td><td>${x.pct}%</td></tr>`).join('')}</tbody></table>`
+        : '<p class="sub">Bu dövrdə endirim olmayıb.</p>'}
+      <h3 class="ana-h3">Qiymət qrafiki</h3>
+      <p class="sub">Ödənilən qiymət hər mağazada (endirim olanda endirimli qiymət)</p>
+      ${series.length ? lineChart('h-' + Date.now(), bk, series, {width, label: 'Qiymət tarixçəsi', fmt: v => fmtPrice(v), tip: v => fmtPrice(v) + ' ₼'}) : '<p class="sub">Bu məhsulun tarixçəsi hələ yoxdur.</p>'}`;
+    bindCharts(sheet);
+  };
+  sheet.addEventListener('click', e => {
+    const c = e.target.closest('[data-year]'); if (!c || c.dataset.year === pick) return;
+    pick = c.dataset.year; sheet.querySelectorAll('[data-year]').forEach(x => x.setAttribute('aria-pressed', String(x === c)));
+    draw();
   });
-  /* two listings in one shop: tell them apart by the shop's own name */
-  for (const s of series) if (series.filter(x => x.id === s.id).length > 1 && s.item) s.name += ' · ' + s.item;
-  const runs = mine.flatMap(it => itemStory(it, a, end).promos.map(x => ({...x, st: it.st}))).sort((x, y) => y.from - x.from);
-  const width = Math.min(680, sheet.clientWidth - 32 || 340);
-  sheet.innerHTML = `<div class="grab"></div><div class="sheet-bar"><span></span><button class="icon-btn" data-close aria-label="Bağla">${ICON.close}</button></div>
-    <h2 class="det-name">${esc(name)}</h2>
-    <p class="sub">Ödənilən qiymət hər mağazada (endirim olanda endirimli qiymət)</p>
-    ${series.length ? lineChart('h-' + Date.now(), bk, series, {width, label: 'Qiymət tarixçəsi', fmt: v => fmtPrice(v), tip: v => fmtPrice(v) + ' ₼'}) : '<p class="sub">Bu məhsulun tarixçəsi hələ yoxdur.</p>'}
-    <h3 class="ana-h3">Endirimlər</h3>
-    ${runs.length ? `<table class="atable"><thead><tr><th>Mağaza</th><th>Tarix</th><th>Qiymət</th><th>Endirim</th></tr></thead><tbody>
-      ${runs.map(x => `<tr><td>${shopDot(x.st)}${esc(storeName(x.st))}</td><td>${fmtDayNo(x.from)}${x.to !== x.from ? ' – ' + fmtDayNo(x.to) : ''}</td><td>${fmtPrice(x.s)} <s>${fmtPrice(x.r)}</s></td><td>${x.pct}%</td></tr>`).join('')}</tbody></table>`
-      : '<p class="sub">Bu dövrdə endirim olmayıb.</p>'}`;
-  bindCharts(sheet);
+  await draw();
 }
 
 /* ---------- one product listed twice: the same item imported from two shops ---------- */
@@ -2863,18 +2905,21 @@ function openDuplicates(){
    came from, so the robot's daily price never reached those rows. The owner's app links them once: the OBA listing must have the
    same weight and flavours, share a name word, and have had exactly the imported price on the robot's first day (or today).
    Exactly one such listing, or nothing is written. */
-const RELINK_V = 1;
 let relinkBusy = false;
 async function relinkShops(tries = 0){
   if (DEMO || S.role !== 'owner' || relinkBusy || !LIVE.idx) return;
   if (!S.synced.products || !S.synced.settings) { if (tries < 20) setTimeout(() => relinkShops(tries + 1), 5000); return; }
-  if ((S.settings.relinkV || 0) >= RELINK_V) return;
+  /* each shop is linked once, the first time the robot brings its list (the first pass did every shop it had then) */
+  const done = new Set(Array.isArray(S.settings.relinked) ? S.settings.relinked : (S.settings.relinkV >= 1 ? ['oba', 'tam', 'bravo', 'neptun', 'spar', 'woltm'] : []));
+  const shops = Object.keys(LIVE.idx).filter(st => st !== 'araz' && !done.has(st) && LIVE.idx[st].byId.size > 0);
+  if (!shops.length) return;
   relinkBusy = true;
   try {
     const todo = [];
-    for (const p of S.products) for (const st of Object.keys(p.prices || {}))
-      if (st !== 'araz' && LIVE.idx[st] && !(p.links && p.links[st]) && money((p.prices[st] || {}).r) != null && !liveItem(p, st)) todo.push([p, st]);
-    if (!todo.length) { saveSettings({relinkV: RELINK_V}); return; }
+    for (const p of S.products) for (const st of shops)
+      if (p.prices && p.prices[st] && !(p.links && p.links[st]) && money(p.prices[st].r) != null && !liveItem(p, st)) todo.push([p, st]);
+    const finish = () => saveSettings({relinked: [...done, ...shops]});
+    if (!todo.length) { finish(); return; }
     const idx = await loadHistIndex(), first = idx && idx.first ? String(idx.first).slice(0, 7) : null;
     const firstR = new Map();
     if (first) { await loadHist([first]); for (const t of timelines([first], null).items.values()) if (t.pts.length) firstR.set(t.key, t.pts[0][1]); }
@@ -2896,8 +2941,8 @@ async function relinkShops(tries = 0){
     }
     const changes = [...byProduct].map(([id, links]) => [id, {links}]);
     if (changes.length) await writePaths(changes);
-    saveSettings({relinkV: RELINK_V});
-    if (changes.length) toast(`${changes.length} məhsulun OBA və Tamstore qiyməti robota bağlandı`);
+    finish();
+    if (changes.length) toast(`${changes.length} məhsulun ${shops.map(storeName).join(', ')} qiyməti robota bağlandı`);
   } finally { relinkBusy = false; }
 }
 
