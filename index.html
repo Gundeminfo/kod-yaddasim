@@ -2597,9 +2597,7 @@ function robotLine(){
   const d = LIVE.data; if (!d) return 'Robotun məlumatı hələ yoxdur.';
   const when = new Date(d.at);
   const st = Object.entries(d.stores || {}).map(([id, s]) => `${storeName(id)} ${s.ok === false ? '✗' : '✓'}`).join(' · ');
-  const via = new Map(); for (const [id, s] of Object.entries(d.stores || {})) if (s.via) via.set(s.via, [...(via.get(s.via) || []), storeName(id)]);
-  return `Son yoxlama: ${fmtDay(when)} ${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')} · ${st}`
-    + [...via].map(([v, names]) => `. ${names.join(', ')} qiymətləri ${v} saytından götürülür`).join('') + (via.size ? '.' : '');
+  return `Son yoxlama: ${fmtDay(when)} ${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')} · ${st}`;
 }
 async function renderAnaliz(force){
   if (S.route.name !== 'analiz' || !$('#content')) return;
