@@ -143,14 +143,59 @@ async function collect_oba({log}){
   return [...all.values()];
 }
 
+/* ===== Shops read from marketqiymeti.az =====
+   An independent price site that collects Bazarstore and Birmarket every night (its robots.txt lets every robot in).
+   Bazarstore turns away GitHub's servers, so its prices come from here. The sweets sub-sections only (no crisps or nuts),
+   24 cards a page; the card's slug is the id. A page whose cards belong to other shops means the shop is not on the
+   site that day: the run counts as failed and yesterday's list stays. */
+const BASE_mq = 'https://marketqiymeti.az';
+const MQ_ALT = ['sokolad', 'pecenye-biskvit', 'keks-vafli', 'sekerleme', 'saqqiz'];
+export function parseMqPage(h, shop){
+  const out = []; let other = 0;
+  for (const m of h.matchAll(/<a\b[^>]*class="c"[^>]*href="\/mehsul\/([^"#?]+)"[^>]*>([\s\S]*?)<\/a>/g)) {
+    const c = m[2];
+    const label = decode((c.match(/<span class="t">([\s\S]*?)<\/span>/) || [])[1] || '');
+    if (shop && label && norm(label) !== norm(shop)) { other++; continue; }
+    const name = decode((c.match(/<div class="c-nm">([\s\S]*?)<\/div>/) || [])[1] || '');
+    const now = (c.match(/<span class="now">([^<]*)<\/span>/) || [])[1];
+    const was = (c.match(/<span class="was">([^<]*)<\/span>/) || [])[1];
+    const img = (c.match(/<img class="pdimg" src="([^"]+)"/) || [])[1] || '';
+    if (!name || !now) continue;
+    out.push(item(m[1], name, was || now, was ? now : null, {img}));
+  }
+  out.other = other;
+  return out;
+}
+function mqStore(m, shop){
+  return async ({log}) => {
+    const all = new Map();
+    for (const alt of MQ_ALT) {
+      let n = 0;
+      for (let p = 1; p <= 120; p++) {
+        const h = await page(`${BASE_mq}/kateqoriya/sirniyyat?alt=${alt}&sort=ucuz&m%5B%5D=${m}&page=${p}`, {pause: 1200});
+        const list = parseMqPage(h || '', shop);
+        if (!list.length) { if (list.other) throw new Error(`marketqiymeti.az-da ${shop} yoxdur`); break; }
+        let fresh = 0; for (const it of list) { if (!all.has(it.id)) fresh++; all.set(it.id, it); }
+        n += list.length;
+        if (!fresh || list.length + list.other < 24) break;
+      }
+      log(alt, n);
+    }
+    if (!all.size) throw new Error(`marketqiymeti.az-da ${shop} məlumatı yoxdur`);
+    log('cəmi', all.size);
+    return [...all.values()];
+  };
+}
+
 /* ===== Shops whose prices are read from their Wolt branch (no price catalogue of their own) ===== */
 export const STORES = [
   {id: 'araz', name: 'Araz', order: 1, collect: collect_araz},
-  {id: 'bazar', name: 'Bazarstore', order: 2, collect: collect_bazar},
+  {id: 'bazar', name: 'Bazarstore', order: 2, via: 'marketqiymeti.az', collect: mqStore('bazarstore', 'Bazarstore')},
   {id: 'oba', name: 'OBA', order: 3, collect: collect_oba},
   {id: 'tam', name: 'Tamstore', order: 4, via: 'Wolt', collect: woltStore(['tamstore-20-yanvar', 'tamstore-yeni-yasamal', 'tamstore-tarqovaya', 'tamstore-bayil'])},
   {id: 'bravo', name: 'Bravo', order: 5, via: 'Wolt', collect: woltStore(['bravo-supermarket-genclik', 'bravo-tahir-97', 'bravo-supermarket-samad-vurgun', 'bravo-supermarket-4-mkr'])},
   {id: 'neptun', name: 'Neptun', order: 6, via: 'Wolt', collect: woltStore(['neptun-supermarket-28', 'neptun-supermarket-narimanovv', 'neptun-supermarket-3-mkr', 'neptun-8-mkr'])},
   {id: 'spar', name: 'SPAR', order: 7, via: 'Wolt', collect: woltStore(['spar-axundov'])},
   {id: 'woltm', name: 'Wolt Market', order: 8, via: 'Wolt', collect: woltStore(['wolt-market-yasamal', 'wolt-market-baku', 'wolt-market-nasimi', 'wolt-market-landmark'])},
+  {id: 'birmarket', name: 'Birmarket', order: 9, via: 'marketqiymeti.az', collect: mqStore('birmarket', 'Birmarket')},
 ];
